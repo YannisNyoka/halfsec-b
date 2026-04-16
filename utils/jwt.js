@@ -7,21 +7,23 @@ export const signToken = (id) => {
 };
 
 export const sendTokenCookie = (res, token) => {
-  const cookieOptions = {
-    httpOnly: true,                                     // JS cannot access this cookie
-    secure: process.env.NODE_ENV === 'production',      // HTTPS only in production
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,                  // 7 days in ms
-  };
-
-  res.cookie('token', token, cookieOptions);
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: isProduction,           // must be true for sameSite: 'none'
+    sameSite: isProduction ? 'none' : 'lax',  // 'none' required for cross-domain
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
 };
 
 export const clearTokenCookie = (res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   res.cookie('token', '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 0,
   });
 };
