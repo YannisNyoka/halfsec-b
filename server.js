@@ -25,7 +25,8 @@ app.use(helmetConfig);
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   process.env.CLIENT_URL,
-  'http://localhost:5173',  // keep for local dev
+  'http://localhost:5173',
+  'https://halfsec-f.vercel.app'  // keep for local dev
 ].filter(Boolean);
 
 app.use(cors({
