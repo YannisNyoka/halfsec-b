@@ -1,7 +1,9 @@
 import Order from '../models/Order.js';
 import Cart from '../models/Cart.js';
 import Product from '../models/Product.js';
+import User from '../models/User.js';
 import { validationResult } from 'express-validator';
+import { sendOrderConfirmation, sendAdminOrderAlert, sendOrderStatusUpdate } from '../utils/email.js';
 
 // ── Place order ────────────────────────────────────────────────────────────────
 export const placeOrder = async (req, res) => {
@@ -11,7 +13,6 @@ export const placeOrder = async (req, res) => {
 
     const { shippingAddress, paymentMethod, notes } = req.body;
 
-    // Get the user's cart with product details
     const cart = await Cart.findOne({ user: req.user.id })
       .populate('items.product', 'name images price stock isActive');
 
@@ -19,10 +20,9 @@ export const placeOrder = async (req, res) => {
       return res.status(400).json({ message: 'Your cart is empty.' });
     }
 
-    // Validate stock for every item before creating order
     for (const item of cart.items) {
       if (!item.product || !item.product.isActive) {
-        return res.status(400).json({ message: `A product in your cart is no longer available.` });
+        return res.status(400).json({ message: 'A product in your cart is no longer available.' });
       }
       if (item.product.stock < item.quantity) {
         return res.status(400).json({
@@ -31,20 +31,18 @@ export const placeOrder = async (req, res) => {
       }
     }
 
-    // Snapshot order items from cart
     const orderItems = cart.items.map((item) => ({
       product: item.product._id,
       name: item.product.name,
       image: item.product.images[0]?.url || '',
-      price: item.priceAtAdd,       // use the locked-in price from cart
+      price: item.priceAtAdd,
       quantity: item.quantity,
     }));
 
     const itemsTotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const shippingCost = itemsTotal >= 500 ? 0 : 80;   // free shipping over R500
+    const shippingCost = itemsTotal >= 500 ? 0 : 80;
     const total = itemsTotal + shippingCost;
 
-    // Create the order
     const order = await Order.create({
       user: req.user.id,
       items: orderItems,
@@ -56,7 +54,6 @@ export const placeOrder = async (req, res) => {
       notes,
     });
 
-    // Decrement stock for each product
     await Promise.all(
       cart.items.map((item) =>
         Product.findByIdAndUpdate(item.product._id, {
@@ -65,8 +62,18 @@ export const placeOrder = async (req, res) => {
       )
     );
 
-    // Clear the cart after order is placed
     await Cart.findOneAndDelete({ user: req.user.id });
+
+    // Send emails — non-blocking, failure won't break the order
+    try {
+      const customer = await User.findById(req.user.id).select('name email');
+      if (customer) {
+        sendOrderConfirmation(order, customer.email, customer.name);
+        sendAdminOrderAlert(order, customer.name, customer.email);
+      }
+    } catch (emailErr) {
+      console.error('Email send failed (non-fatal):', emailErr.message);
+    }
 
     res.status(201).json({ message: 'Order placed successfully.', order });
   } catch (error) {
@@ -75,25 +82,21 @@ export const placeOrder = async (req, res) => {
   }
 };
 
-// ── Get my orders (customer) ───────────────────────────────────────────────────
+// ── Get my orders ──────────────────────────────────────────────────────────────
 export const getMyOrders = async (req, res) => {
   try {
     const orders = await Order.find({ user: req.user.id })
-      .sort({ createdAt: -1 })
-      .select('-__v');
+      .sort({ createdAt: -1 }).select('-__v');
     res.status(200).json({ orders });
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });
   }
 };
 
-// ── Get single order (customer — own orders only) ──────────────────────────────
+// ── Get single order (customer) ────────────────────────────────────────────────
 export const getMyOrder = async (req, res) => {
   try {
-    const order = await Order.findOne({
-      _id: req.params.id,
-      user: req.user.id,       // ensures customer can only see their own orders
-    });
+    const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
     if (!order) return res.status(404).json({ message: 'Order not found.' });
     res.status(200).json({ order });
   } catch (error) {
@@ -106,7 +109,6 @@ export const getAllOrders = async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     const filter = status ? { orderStatus: status } : {};
-
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, parseInt(limit));
     const skip = (pageNum - 1) * limitNum;
@@ -115,8 +117,7 @@ export const getAllOrders = async (req, res) => {
       Order.find(filter)
         .populate('user', 'name email')
         .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum),
+        .skip(skip).limit(limitNum),
       Order.countDocuments(filter),
     ]);
 
@@ -167,6 +168,15 @@ export const updateOrderStatus = async (req, res) => {
       .populate('user', 'name email');
     if (!order) return res.status(404).json({ message: 'Order not found.' });
 
+    // Send status update email — non-blocking
+    try {
+      if (orderStatus && order.user?.email) {
+        sendOrderStatusUpdate(order, order.user.email, order.user.name);
+      }
+    } catch (emailErr) {
+      console.error('Status email failed (non-fatal):', emailErr.message);
+    }
+
     res.status(200).json({ message: 'Order updated.', order });
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });
@@ -176,12 +186,7 @@ export const updateOrderStatus = async (req, res) => {
 // ── Dashboard stats (admin) ────────────────────────────────────────────────────
 export const getDashboardStats = async (req, res) => {
   try {
-    const [
-      totalOrders,
-      totalRevenue,
-      pendingOrders,
-      deliveredOrders,
-    ] = await Promise.all([
+    const [totalOrders, totalRevenue, pendingOrders, deliveredOrders] = await Promise.all([
       Order.countDocuments(),
       Order.aggregate([
         { $match: { paymentStatus: 'paid' } },
