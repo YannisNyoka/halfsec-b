@@ -56,6 +56,9 @@ const orderSchema = new mongoose.Schema(
     notes: { type: String, trim: true, maxlength: 500 },
     paidAt: Date,
     deliveredAt: Date,
+    paymentReference: {
+  type: String,
+},
   },
   { timestamps: true }
 );
