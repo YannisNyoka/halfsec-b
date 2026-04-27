@@ -78,6 +78,6 @@ export const orderValidator = [
   body('shippingAddress.postalCode').trim().notEmpty().withMessage('Postal code is required.'),
   body('shippingAddress.phone').trim().notEmpty().withMessage('Phone number is required.'),
   body('paymentMethod')
-    .isIn(['card', 'eft', 'payfast'])
+    .isIn(['card', 'eft', 'payfast', 'yoco'])
     .withMessage('Invalid payment method.'),
 ];
