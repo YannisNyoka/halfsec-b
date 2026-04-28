@@ -49,6 +49,8 @@ app.use(cors({
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(cookieParser());
+// Raw body for Yoco webhook — must be BEFORE express.json()
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
