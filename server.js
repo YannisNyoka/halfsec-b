@@ -63,6 +63,15 @@ app.use('/api', apiLimiter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
+  const userAgent = req.headers['user-agent'] || '';
+  const isMonitor = userAgent.includes('UptimeRobot') ||
+                    userAgent.includes('monitor') ||
+                    req.query.source === 'monitor';
+
+  if (!isMonitor) {
+    console.log(`Health check from: ${req.ip}`);
+  }
+
   res.status(200).json({
     status: 'ok',
     environment: process.env.NODE_ENV,
