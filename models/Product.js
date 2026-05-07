@@ -62,6 +62,12 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    
+lowStockThreshold: {
+  type: Number,
+  default: 3,
+  min: 0,
+},
   },
   { timestamps: true }
 );

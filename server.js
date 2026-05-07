@@ -14,6 +14,7 @@ import orderRoutes from './routes/orderRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import stockRoutes from './routes/stockRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -89,6 +90,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/stock', stockRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });

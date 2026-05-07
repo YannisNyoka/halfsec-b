@@ -283,3 +283,43 @@ export const sendOrderStatusUpdate = async (order, userEmail, userName) => {
     html: emailWrapper(content),
   });
 };
+
+// ── Admin: low stock alert ─────────────────────────────────────────────────────
+export const sendLowStockAlert = async (product) => {
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      ⚠️ Low stock alert
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;">
+      A product on Halfsec is running low on stock.
+    </p>
+
+    <div style="background:#fff8ed;border:1px solid #fde68a;border-radius:10px;padding:20px;margin-bottom:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="font-size:12px;color:#888;padding-bottom:4px;">Product</td>
+          <td style="font-size:12px;color:#888;padding-bottom:4px;text-align:right;">Stock remaining</td>
+        </tr>
+        <tr>
+          <td style="font-size:18px;font-weight:700;color:#1a1a1a;">${product.name}</td>
+          <td style="font-size:24px;font-weight:800;color:${product.stock === 0 ? '#e05252' : '#d97706'};text-align:right;">
+            ${product.stock}
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align:center;">
+      <a href="${process.env.CLIENT_URL}/admin/products/edit/${product._id}"
+        style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
+        Update stock →
+      </a>
+    </div>
+  `;
+
+  return sendEmail({
+    to: process.env.ADMIN_EMAIL,
+    subject: `⚠️ Low stock: "${product.name}" has ${product.stock} left | Halfsec`,
+    html: emailWrapper(content),
+  });
+};
