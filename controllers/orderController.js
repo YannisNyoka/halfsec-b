@@ -4,6 +4,7 @@ import Product from '../models/Product.js';
 import User from '../models/User.js';
 import { validationResult } from 'express-validator';
 import { sendOrderConfirmation, sendAdminOrderAlert, sendOrderStatusUpdate } from '../utils/email.js';
+import Coupon from '../models/Coupon.js';
 
 // ── Place order ────────────────────────────────────────────────────────────────
 export const placeOrder = async (req, res) => {
@@ -39,20 +40,69 @@ export const placeOrder = async (req, res) => {
       quantity: item.quantity,
     }));
 
+    // Handle coupon
+let discountAmount = 0;
+let couponDoc = null;
+
+if (req.body.couponCode) {
+  couponDoc = await Coupon.findOne({
+    code: req.body.couponCode.toUpperCase().trim(),
+    isActive: true,
+  });
+
+  if (couponDoc) {
+    const now = new Date();
+    const expired = couponDoc.expiresAt && now > couponDoc.expiresAt;
+    const notStarted = couponDoc.startsAt && now < couponDoc.startsAt;
+    const limitReached = couponDoc.usageLimit !== null &&
+      couponDoc.usageCount >= couponDoc.usageLimit;
+    const userUsed = couponDoc.usedBy.filter(
+      (u) => u.user.toString() === req.user.id
+    ).length >= couponDoc.userUsageLimit;
+
+    if (!expired && !notStarted && !limitReached && !userUsed &&
+        itemsTotal >= couponDoc.minOrderAmount) {
+      if (couponDoc.type === 'percentage') {
+        discountAmount = (itemsTotal * couponDoc.value) / 100;
+        if (couponDoc.maxDiscount) {
+          discountAmount = Math.min(discountAmount, couponDoc.maxDiscount);
+        }
+      } else {
+        discountAmount = Math.min(couponDoc.value, itemsTotal);
+      }
+      discountAmount = Math.round(discountAmount * 100) / 100;
+    }
+  }
+}
+
+
+
     const itemsTotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const shippingCost = itemsTotal >= 500 ? 0 : 80;
-    const total = itemsTotal + shippingCost;
+    const total = Math.max(0, itemsTotal + shippingCost - discountAmount);
+   
+
+    
 
     const order = await Order.create({
-      user: req.user.id,
-      items: orderItems,
-      shippingAddress,
-      paymentMethod,
-      itemsTotal,
-      shippingCost,
-      total,
-      notes,
-    });
+  user: req.user.id,
+  items: orderItems,
+  shippingAddress,
+  paymentMethod,
+  itemsTotal,
+  shippingCost,
+  discountAmount,
+  couponCode: couponDoc ? couponDoc.code : null,
+  total,
+  notes,
+});
+
+// Mark coupon as used
+if (couponDoc && discountAmount > 0) {
+  couponDoc.usageCount += 1;
+  couponDoc.usedBy.push({ user: req.user.id });
+  await couponDoc.save();
+}
 
     await Promise.all(
       cart.items.map((item) =>
