@@ -194,10 +194,22 @@ export const getOrderAdmin = async (req, res) => {
 // ── Update order status (admin) ────────────────────────────────────────────────
 export const updateOrderStatus = async (req, res) => {
   try {
-    const { orderStatus, paymentStatus } = req.body;
+    const {
+      orderStatus,
+      paymentStatus,
+      trackingNumber,
+      courierName,
+      estimatedDelivery,
+      statusMessage,
+    } = req.body;
 
-    const validOrderStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
-    const validPaymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
+    const validOrderStatuses = [
+      'pending', 'confirmed', 'processing',
+      'shipped', 'delivered', 'cancelled',
+    ];
+    const validPaymentStatuses = [
+      'pending', 'paid', 'failed', 'refunded',
+    ];
 
     if (orderStatus && !validOrderStatuses.includes(orderStatus)) {
       return res.status(400).json({ message: 'Invalid order status.' });
@@ -206,29 +218,56 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid payment status.' });
     }
 
-    const updates = {};
-    if (orderStatus) updates.orderStatus = orderStatus;
-    if (paymentStatus) {
-      updates.paymentStatus = paymentStatus;
-      if (paymentStatus === 'paid') updates.paidAt = new Date();
-    }
-    if (orderStatus === 'delivered') updates.deliveredAt = new Date();
-
-    const order = await Order.findByIdAndUpdate(req.params.id, updates, { new: true })
-      .populate('user', 'name email');
+    const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-    // Send status update email — non-blocking
+    // Build updates
+    if (orderStatus) order.orderStatus = orderStatus;
+    if (paymentStatus) {
+      order.paymentStatus = paymentStatus;
+      if (paymentStatus === 'paid') order.paidAt = new Date();
+    }
+    if (orderStatus === 'delivered') order.deliveredAt = new Date();
+    if (trackingNumber !== undefined) order.trackingNumber = trackingNumber;
+    if (courierName !== undefined) order.courierName = courierName;
+    if (estimatedDelivery !== undefined) order.estimatedDelivery = estimatedDelivery;
+
+    // Add timeline entry
+    const defaultMessages = {
+      pending: 'Order received and awaiting confirmation.',
+      confirmed: 'Your order has been confirmed.',
+      processing: 'Your order is being packed.',
+      shipped: trackingNumber
+        ? `Your order has been shipped. Tracking: ${trackingNumber}`
+        : 'Your order is on its way.',
+      delivered: 'Your order has been delivered.',
+      cancelled: 'Your order has been cancelled.',
+    };
+
+    if (orderStatus) {
+      order.timeline.push({
+        status: orderStatus,
+        message: statusMessage || defaultMessages[orderStatus],
+        timestamp: new Date(),
+        updatedBy: req.user.id,
+      });
+    }
+
+    await order.save();
+    await order.populate('user', 'name email');
+
+    // Send status email
     try {
       if (orderStatus && order.user?.email) {
         sendOrderStatusUpdate(order, order.user.email, order.user.name);
       }
     } catch (emailErr) {
-      console.error('Status email failed (non-fatal):', emailErr.message);
+      console.error('Status email failed:', emailErr.message);
     }
 
     res.status(200).json({ message: 'Order updated.', order });
   } catch (error) {
+    console.error('Update order error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

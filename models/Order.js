@@ -64,6 +64,31 @@ couponCode: {
     notes: { type: String, trim: true, maxlength: 500 },
     paidAt: Date,
     deliveredAt: Date,
+    trackingNumber: {
+  type: String,
+  trim: true,
+  default: null,
+},
+courierName: {
+  type: String,
+  trim: true,
+  default: null,
+},
+estimatedDelivery: {
+  type: Date,
+  default: null,
+},
+timeline: [
+  {
+    status: { type: String, required: true },
+    message: { type: String, trim: true },
+    timestamp: { type: Date, default: Date.now },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+  },
+],
     paymentReference: {
   type: String,
 },
