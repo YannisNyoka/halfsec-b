@@ -240,39 +240,68 @@ export const sendOrderStatusUpdate = async (order, userEmail, userName) => {
   const statusMessages = {
     confirmed: { emoji: '✅', title: 'Order confirmed', msg: 'Your order has been confirmed and is being prepared.' },
     processing: { emoji: '📦', title: 'Order processing', msg: 'Your order is being packed and prepared for shipping.' },
-    shipped: { emoji: '🚚', title: 'Order shipped!', msg: 'Your order is on its way. Expect delivery within 2-5 business days.' },
+    shipped: { emoji: '🚚', title: 'Order shipped!', msg: 'Your order is on its way!' },
     delivered: { emoji: '🎉', title: 'Order delivered!', msg: 'Your order has been delivered. We hope you love it!' },
-    cancelled: { emoji: '❌', title: 'Order cancelled', msg: 'Your order has been cancelled. If this was unexpected, please contact us.' },
+    cancelled: { emoji: '❌', title: 'Order cancelled', msg: 'Your order has been cancelled.' },
   };
 
   const info = statusMessages[order.orderStatus];
   if (!info) return;
 
+  const trackingSection = order.trackingNumber ? `
+    <div style="background:#f5f5f0;border-radius:10px;padding:16px 20px;margin:16px 0;border:1px solid #e0ddd8;">
+      <div style="font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">
+        Shipping details
+      </div>
+      ${order.courierName ? `<div style="font-size:14px;color:#1a1a1a;margin-bottom:6px;"><strong>Courier:</strong> ${order.courierName}</div>` : ''}
+      <div style="font-size:14px;color:#1a1a1a;margin-bottom:6px;">
+        <strong>Tracking:</strong>
+        <span style="font-family:monospace;letter-spacing:1px;color:#d4820a;margin-left:8px;">
+          ${order.trackingNumber}
+        </span>
+      </div>
+      ${order.estimatedDelivery ? `
+        <div style="font-size:14px;color:#1a1a1a;">
+          <strong>Estimated delivery:</strong>
+          ${new Date(order.estimatedDelivery).toLocaleDateString('en-ZA', {
+            weekday: 'long', day: 'numeric', month: 'long',
+          })}
+        </div>
+      ` : ''}
+    </div>
+  ` : '';
+
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
       ${info.emoji} ${info.title}
     </h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+    <p style="margin:0 0 16px;font-size:15px;color:#666;line-height:1.6;">
       Hi ${userName}, ${info.msg}
     </p>
 
-    <div style="background:#f5f5f0;border-radius:10px;padding:16px 20px;margin-bottom:24px;border:1px solid #e0ddd8;">
+    <div style="background:#f5f5f0;border-radius:10px;padding:16px 20px;margin-bottom:16px;border:1px solid #e0ddd8;">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td style="font-size:12px;color:#888;">Order number</td>
           <td style="font-size:12px;color:#888;text-align:right;">Total</td>
         </tr>
         <tr>
-          <td style="font-size:18px;font-weight:800;color:#d4820a;padding-top:4px;">${order.orderNumber}</td>
-          <td style="font-size:18px;font-weight:800;color:#d4820a;text-align:right;padding-top:4px;">R${order.total.toLocaleString()}</td>
+          <td style="font-size:18px;font-weight:800;color:#d4820a;padding-top:4px;">
+            ${order.orderNumber}
+          </td>
+          <td style="font-size:18px;font-weight:800;color:#d4820a;text-align:right;padding-top:4px;">
+            R${order.total.toLocaleString()}
+          </td>
         </tr>
       </table>
     </div>
 
-    <div style="text-align:center;">
+    ${trackingSection}
+
+    <div style="text-align:center;margin-top:24px;">
       <a href="${process.env.CLIENT_URL}/orders/${order._id}"
         style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
-        View order details →
+        Track your order →
       </a>
     </div>
   `;
