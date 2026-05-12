@@ -19,6 +19,7 @@ import wishlistRoutes from './routes/wishlistRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import customerRoutes from './routes/customerRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -99,6 +100,7 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/customers', customerRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });
