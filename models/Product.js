@@ -32,6 +32,11 @@ const productSchema = new mongoose.Schema(
       ref: 'Category',
       required: [true, 'Category is required'],
     },
+    seller: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'User',
+  default: null, // null = platform-owned (your own listings)
+},
     images: [
       {
         url: { type: String, required: true },

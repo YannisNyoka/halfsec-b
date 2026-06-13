@@ -15,7 +15,7 @@ export const placeOrder = async (req, res) => {
     const { shippingAddress, paymentMethod, notes } = req.body;
 
     const cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name images price stock isActive');
+      .populate('items.product', 'name images price stock isActive seller');
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ message: 'Your cart is empty.' });
@@ -34,6 +34,7 @@ export const placeOrder = async (req, res) => {
 
     const orderItems = cart.items.map((item) => ({
       product: item.product._id,
+      seller: item.product.seller || null,
       name: item.product.name,
       image: item.product.images[0]?.url || '',
       price: item.priceAtAdd,

@@ -352,3 +352,45 @@ export const sendLowStockAlert = async (product) => {
     html: emailWrapper(content),
   });
 };
+
+// ── Seller: application received ─────────────────────────────────────────────────
+export const sendSellerApplicationReceived = async (userEmail, userName) => {
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      Application received! 📋
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${userName}, thanks for applying to sell on Halfsec. We'll review your application
+      and get back to you within 1-2 business days.
+    </p>
+  `;
+  return sendEmail({
+    to: userEmail,
+    subject: 'Seller application received | Halfsec',
+    html: emailWrapper(content),
+  });
+};
+
+// ── Seller: approved ─────────────────────────────────────────────────────────────
+export const sendSellerApprovalEmail = async (userEmail, userName) => {
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      You're approved! 🎉
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${userName}, great news — your seller application has been approved.
+      You can now list items on Halfsec.
+    </p>
+    <div style="text-align:center;">
+      <a href="${process.env.CLIENT_URL}/seller"
+        style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
+        Go to seller dashboard →
+      </a>
+    </div>
+  `;
+  return sendEmail({
+    to: userEmail,
+    subject: 'You\'re approved to sell on Halfsec! 🎉',
+    html: emailWrapper(content),
+  });
+};

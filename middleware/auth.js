@@ -52,3 +52,12 @@ export const adminOnly = (req, res, next) => {
   }
   next();
 };
+
+export const sellerOnly = (req, res, next) => {
+  if (req.user?.sellerProfile?.status !== 'approved') {
+    return res.status(403).json({
+      message: 'You must be an approved seller to access this resource.',
+    });
+  }
+  next();
+};

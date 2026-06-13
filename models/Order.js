@@ -7,6 +7,7 @@ const orderItemSchema = new mongoose.Schema(
       ref: 'Product',
       required: true,
     },
+    seller: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, 
     name: { type: String, required: true },      // snapshot
     image: { type: String, required: true },     // snapshot
     price: { type: Number, required: true },     // snapshot

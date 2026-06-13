@@ -20,6 +20,8 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
+import sellerRoutes from './routes/sellerRoutes.js';
+import adminSellerRoutes from './routes/adminSellerRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -101,6 +103,8 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/sellers', sellerRoutes);
+app.use('/api/admin/sellers', adminSellerRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });

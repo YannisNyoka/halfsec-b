@@ -35,6 +35,25 @@ const userSchema = new mongoose.Schema(
       postalCode: { type: String, trim: true },
       country: { type: String, trim: true, default: 'South Africa' },
     },
+    sellerProfile: {
+  businessName: { type: String, trim: true },
+  bio: { type: String, trim: true, maxlength: 500 },
+  phone: { type: String, trim: true },
+  bankDetails: {
+    accountHolder: { type: String, trim: true },
+    bankName: { type: String, trim: true },
+    accountNumber: { type: String, trim: true },
+    branchCode: { type: String, trim: true },
+  },
+  status: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'rejected','suspended'],
+    default: 'none',
+  },
+  appliedAt: Date,
+  approvedAt: Date,
+  rejectionReason: String,
+},
     phone: {
       type: String,
       trim: true,
