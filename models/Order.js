@@ -14,6 +14,8 @@ const orderItemSchema = new mongoose.Schema(
     quantity: { type: Number, required: true, min: 1 },
   },
   { _id: false }
+
+  
 );
 
 const orderSchema = new mongoose.Schema(
@@ -23,6 +25,27 @@ const orderSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Add this as a new top-level field on the Order schema:
+subOrders: [
+  {
+    seller: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    items: [
+      {
+        product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+        name: String,
+        image: String,
+        price: Number,
+        quantity: Number,
+      },
+    ],
+    subtotal: { type: Number, required: true },
+    escrowStatus: {
+      type: String,
+      enum: ['held', 'released', 'refunded', 'disputed'],
+      default: 'held',
+    },
+  },
+],
     orderNumber: {
       type: String,
     },
@@ -57,6 +80,11 @@ const orderSchema = new mongoose.Schema(
   type: Number,
   default: 0,
 },
+buyerProtectionFee: {
+  type: Number,
+  default: 0,
+},
+
 couponCode: {
   type: String,
   default: null,

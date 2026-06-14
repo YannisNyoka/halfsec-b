@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import { validationResult } from 'express-validator';
 import { sendOrderConfirmation, sendAdminOrderAlert, sendOrderStatusUpdate } from '../utils/email.js';
 import Coupon from '../models/Coupon.js';
+import { calculateProtectionFee, groupItemsBySeller } from '../utils/fees.js';
 
 // ── Place order ────────────────────────────────────────────────────────────────
 export const placeOrder = async (req, res) => {
@@ -79,21 +80,35 @@ if (req.body.couponCode) {
 
 
     const itemsTotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const shippingCost = itemsTotal >= 500 ? 0 : 80;
-    const total = Math.max(0, itemsTotal + shippingCost - discountAmount);
-   
+const buyerProtectionFee = calculateProtectionFee(itemsTotal);
+const shippingCost = itemsTotal >= 500 ? 0 : 80;
+const total = itemsTotal + buyerProtectionFee + shippingCost;
 
+// Group items by seller for sub-order tracking
+const grouped = groupItemsBySeller(orderItems);
+const subOrders = Object.entries(grouped).map(([sellerKey, items]) => ({
+  seller: sellerKey === 'platform' ? null : sellerKey,
+  items: items.map((i) => ({
+    product: i.product,
+    name: i.name,
+    image: i.image,
+    price: i.price,
+    quantity: i.quantity,
+  })),
+  subtotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+  escrowStatus: 'held',
+}));
     
 
-    const order = await Order.create({
+const order = await Order.create({
   user: req.user.id,
   items: orderItems,
+  subOrders,
   shippingAddress,
   paymentMethod,
   itemsTotal,
+  buyerProtectionFee,
   shippingCost,
-  discountAmount,
-  couponCode: couponDoc ? couponDoc.code : null,
   total,
   notes,
 });
@@ -293,6 +308,40 @@ export const getDashboardStats = async (req, res) => {
         pendingOrders,
         deliveredOrders,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── Get checkout totals preview ──────────────────────────────────────────────────
+export const getCheckoutPreview = async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ user: req.user.id })
+      .populate('items.product', 'name price stock isActive seller');
+
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ message: 'Your cart is empty.' });
+    }
+
+    const itemsTotal = cart.items.reduce(
+      (sum, item) => sum + item.priceAtAdd * item.quantity, 0
+    );
+    const buyerProtectionFee = calculateProtectionFee(itemsTotal);
+    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const total = itemsTotal + buyerProtectionFee + shippingCost;
+
+    // Count distinct sellers for info display
+    const sellerIds = new Set(
+      cart.items.map((item) => item.product.seller?.toString() || 'platform')
+    );
+
+    res.status(200).json({
+      itemsTotal,
+      buyerProtectionFee,
+      shippingCost,
+      total,
+      sellerCount: sellerIds.size,
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });

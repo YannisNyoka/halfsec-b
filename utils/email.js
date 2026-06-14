@@ -100,24 +100,43 @@ export const sendOrderConfirmation = async (order, userEmail, userName) => {
     </table>
 
     <!-- Totals -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-      <tr>
-        <td style="padding:6px 0;font-size:14px;color:#666;">Subtotal</td>
-        <td style="padding:6px 0;font-size:14px;color:#1a1a1a;text-align:right;">R${order.itemsTotal.toLocaleString()}</td>
-      </tr>
-      <tr>
-        <td style="padding:6px 0;font-size:14px;color:#666;">Shipping</td>
-        <td style="padding:6px 0;font-size:14px;text-align:right;color:${order.shippingCost === 0 ? '#16a34a' : '#1a1a1a'};">
-          ${order.shippingCost === 0 ? 'Free' : `R${order.shippingCost}`}
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:10px 0 0;font-size:16px;font-weight:700;color:#1a1a1a;border-top:2px solid #1a1a1a;">Total</td>
-        <td style="padding:10px 0 0;font-size:16px;font-weight:700;color:#d4820a;text-align:right;border-top:2px solid #1a1a1a;">
-          R${order.total.toLocaleString()}
-        </td>
-      </tr>
-    </table>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+  <tr>
+    <td style="padding:6px 0;font-size:14px;color:#666;">Subtotal</td>
+    <td style="padding:6px 0;font-size:14px;color:#1a1a1a;text-align:right;">R${order.itemsTotal.toLocaleString()}</td>
+  </tr>
+  ${order.buyerProtectionFee > 0 ? `
+  <tr>
+    <td style="padding:6px 0;font-size:14px;color:#666;">
+      Buyer Protection Fee
+      <span style="font-size:11px;color:#999;">ⓘ</span>
+    </td>
+    <td style="padding:6px 0;font-size:14px;color:#1a1a1a;text-align:right;">R${order.buyerProtectionFee.toLocaleString()}</td>
+  </tr>
+  ` : ''}
+  <tr>
+    <td style="padding:6px 0;font-size:14px;color:#666;">Shipping</td>
+    <td style="padding:6px 0;font-size:14px;text-align:right;color:${order.shippingCost === 0 ? '#16a34a' : '#1a1a1a'};">
+      ${order.shippingCost === 0 ? 'Free' : `R${order.shippingCost}`}
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:10px 0 0;font-size:16px;font-weight:700;color:#1a1a1a;border-top:2px solid #1a1a1a;">Total</td>
+    <td style="padding:10px 0 0;font-size:16px;font-weight:700;color:#d4820a;text-align:right;border-top:2px solid #1a1a1a;">
+      R${order.total.toLocaleString()}
+    </td>
+  </tr>
+</table>
+
+${order.buyerProtectionFee > 0 ? `
+<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 20px;margin-bottom:28px;">
+  <div style="font-size:13px;color:#075985;line-height:1.6;">
+    <strong>What's the Buyer Protection Fee?</strong><br>
+    Your payment is held securely until you confirm you've received your item as described.
+    If there's an issue, we're here to help resolve it.
+  </div>
+</div>
+` : ''}
 
     <!-- Shipping address -->
     <div style="background:#f5f5f0;border-radius:10px;padding:16px 20px;margin-bottom:28px;border:1px solid #e0ddd8;">
