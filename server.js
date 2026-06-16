@@ -112,6 +112,7 @@ app.use('/api/admin/sellers', adminSellerRoutes);
 app.use('/api/escrow', escrowRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/seller-ratings', sellerRatingRoutes);
+app.use('/api/seller', sellerRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });

@@ -9,7 +9,11 @@ export const getProducts = async (req, res) => {
       maxPrice, featured, sort, page = 1, limit = 12,
     } = req.query;
 
-    const filter = { isActive: true, moderationStatus: 'approved', stock: { $gt: 0 }, };
+    const filter = { isActive: true, $or: [
+    { moderationStatus: 'approved' },
+    { moderationStatus: { $exists: false } },
+    { moderationStatus: null },
+  ], stock: { $gt: 0 }, };
 
     if (search) {
       filter.$text = { $search: search };
