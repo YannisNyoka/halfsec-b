@@ -71,6 +71,13 @@ const productSchema = new mongoose.Schema(
   average: { type: Number, default: 0, min: 0, max: 5 },
   count: { type: Number, default: 0 },
 },
+
+moderationStatus: {
+  type: String,
+  enum: ['approved', 'pending', 'rejected'],
+  default: 'approved', // platform's own listings auto-approved
+},
+moderationNote: String,
     
 lowStockThreshold: {
   type: Number,

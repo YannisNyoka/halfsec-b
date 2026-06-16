@@ -45,6 +45,12 @@ const userSchema = new mongoose.Schema(
     accountNumber: { type: String, trim: true },
     branchCode: { type: String, trim: true },
   },
+
+  rating: {
+  average: { type: Number, default: 0 },
+  count: { type: Number, default: 0 },
+},
+
   status: {
     type: String,
     enum: ['none', 'pending', 'approved', 'rejected','suspended'],

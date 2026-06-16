@@ -413,3 +413,254 @@ export const sendSellerApprovalEmail = async (userEmail, userName) => {
     html: emailWrapper(content),
   });
 };
+
+// ── Buyer: review reminder (2 days before auto-release) ─────────────────────────
+export const sendReviewReminderEmail = async (order, sub, userEmail, userName) => {
+  const itemNames = sub.items.map((i) => i.name).join(', ');
+
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      How's your order? 👀
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${userName}, it's been a few days since your order
+      <strong>${order.orderNumber}</strong> (${itemNames}) was delivered.
+    </p>
+
+    <div style="background:#fff8ed;border:1px solid #fde68a;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+      <div style="font-size:13px;color:#92400e;line-height:1.6;">
+        If everything looks good, please confirm receipt so we can release payment to the seller.
+        If there's an issue, you can raise it instead — but please act within
+        <strong>2 days</strong>, or the payment will be automatically released.
+      </div>
+    </div>
+
+    <div style="text-align:center;">
+      <a href="${process.env.CLIENT_URL}/orders/${order._id}"
+        style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
+        Review my order →
+      </a>
+    </div>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `Please review your order ${order.orderNumber} | Halfsec`,
+    html: emailWrapper(content),
+  });
+};
+
+// ── Seller: funds released ───────────────────────────────────────────────────────
+export const sendFundsReleasedToSellerEmail = async (sellerEmail, sellerName, order, sub) => {
+  const itemNames = sub.items.map((i) => i.name).join(', ');
+
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      Funds released! 💰
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${sellerName}, the buyer for order <strong>${order.orderNumber}</strong>
+      (${itemNames}) has confirmed receipt — or the review window has passed.
+    </p>
+
+    <div style="background:#f5f5f0;border-radius:10px;padding:16px 20px;margin-bottom:24px;border:1px solid #e0ddd8;">
+      <div style="font-size:12px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">
+        Amount added to your balance
+      </div>
+      <div style="font-size:24px;font-weight:800;color:#16a34a;">
+        R${sub.subtotal.toLocaleString()}
+      </div>
+    </div>
+
+    <p style="margin:0;font-size:14px;color:#666;line-height:1.6;">
+      This amount is now part of your payout balance. You can view your balance
+      and payout history in your seller dashboard.
+    </p>
+
+    <div style="text-align:center;margin-top:20px;">
+      <a href="${process.env.CLIENT_URL}/seller"
+        style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
+        View seller dashboard →
+      </a>
+    </div>
+  `;
+
+  return sendEmail({
+    to: sellerEmail,
+    subject: `Funds released for order ${order.orderNumber} | Halfsec`,
+    html: emailWrapper(content),
+  });
+};
+
+// ── Admin: dispute received ──────────────────────────────────────────────────────
+export const sendDisputeReceivedEmail = async (order, sub) => {
+  const itemNames = sub.items.map((i) => i.name).join(', ');
+
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      New dispute raised ⚠️
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      A buyer has raised a dispute for order <strong>${order.orderNumber}</strong> (${itemNames}).
+    </p>
+
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+      <div style="font-size:12px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Reason</div>
+      <div style="font-size:15px;font-weight:700;color:#c0392b;margin-bottom:10px;">${sub.dispute.reason}</div>
+      <div style="font-size:12px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Description</div>
+      <div style="font-size:14px;color:#1a1a1a;line-height:1.6;">${sub.dispute.description}</div>
+    </div>
+
+    <div style="text-align:center;">
+      <a href="${process.env.CLIENT_URL}/admin/disputes"
+        style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
+        Review dispute →
+      </a>
+    </div>
+  `;
+
+  return sendEmail({
+    to: process.env.ADMIN_EMAIL,
+    subject: `⚠️ Dispute raised — order ${order.orderNumber} | Halfsec`,
+    html: emailWrapper(content),
+  });
+};
+
+// ── Buyer & Seller: dispute resolved ─────────────────────────────────────────────
+export const sendDisputeResolvedEmail = async (order, sub, resolution) => {
+  const itemNames = sub.items.map((i) => i.name).join(', ');
+  const buyerWon = resolution === 'refunded_to_buyer';
+
+  // Email to buyer
+  const buyerContent = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      Dispute resolved
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${order.user.name}, we've reviewed your dispute for order
+      <strong>${order.orderNumber}</strong> (${itemNames}).
+    </p>
+
+    <div style="background:${buyerWon ? '#f0fdf4' : '#f5f5f0'};border:1px solid ${buyerWon ? '#bbf7d0' : '#e0ddd8'};border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+      <div style="font-size:15px;font-weight:700;color:${buyerWon ? '#16a34a' : '#1a1a1a'};">
+        ${buyerWon
+          ? `A refund of R${sub.subtotal.toLocaleString()} will be processed to your original payment method.`
+          : `After review, we've released payment to the seller for this item.`
+        }
+      </div>
+      ${sub.dispute.adminNotes ? `
+        <div style="font-size:13px;color:#666;margin-top:10px;line-height:1.6;">
+          ${sub.dispute.adminNotes}
+        </div>
+      ` : ''}
+    </div>
+
+    <p style="margin:0;font-size:14px;color:#666;">
+      If you have any questions about this decision, please reply to this email.
+    </p>
+  `;
+
+  await sendEmail({
+    to: order.user.email,
+    subject: `Dispute resolved — order ${order.orderNumber} | Halfsec`,
+    html: emailWrapper(buyerContent),
+  });
+
+  // Email to seller (if applicable)
+  if (sub.seller) {
+    try {
+      const User = (await import('../models/User.js')).default;
+      const seller = await User.findById(sub.seller).select('name email');
+      if (seller) {
+        const sellerContent = `
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+            Dispute resolved
+          </h2>
+          <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+            Hi ${seller.name}, a dispute for order <strong>${order.orderNumber}</strong>
+            (${itemNames}) has been resolved.
+          </p>
+
+          <div style="background:${buyerWon ? '#fef2f2' : '#f0fdf4'};border:1px solid ${buyerWon ? '#fecaca' : '#bbf7d0'};border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+            <div style="font-size:15px;font-weight:700;color:${buyerWon ? '#c0392b' : '#16a34a'};">
+              ${buyerWon
+                ? `The buyer has been refunded R${sub.subtotal.toLocaleString()} for this item. This amount will not be added to your payout balance.`
+                : `R${sub.subtotal.toLocaleString()} has been added to your payout balance.`
+              }
+            </div>
+            ${sub.dispute.adminNotes ? `
+              <div style="font-size:13px;color:#666;margin-top:10px;line-height:1.6;">
+                ${sub.dispute.adminNotes}
+              </div>
+            ` : ''}
+          </div>
+        `;
+        await sendEmail({
+          to: seller.email,
+          subject: `Dispute resolved — order ${order.orderNumber} | Halfsec`,
+          html: emailWrapper(sellerContent),
+        });
+      }
+    } catch {}
+  }
+};
+
+// ── Seller: payout processed ─────────────────────────────────────────────────────
+export const sendPayoutProcessedEmail = async (sellerEmail, sellerName, payout) => {
+  const itemsHtml = payout.subOrders.map((s) => `
+    <tr>
+      <td style="padding:8px 0;border-bottom:1px solid #f0ede8;font-size:13px;color:#1a1a1a;">
+        Order item
+      </td>
+      <td style="padding:8px 0;border-bottom:1px solid #f0ede8;font-size:13px;font-weight:600;color:#16a34a;text-align:right;">
+        R${s.amount.toLocaleString()}
+      </td>
+    </tr>
+  `).join('');
+
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      Payout sent! 🏦
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${sellerName}, we've processed a payout to your bank account.
+    </p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:24px;text-align:center;">
+      <div style="font-size:12px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">
+        Amount paid
+      </div>
+      <div style="font-size:28px;font-weight:800;color:#16a34a;">
+        R${payout.amount.toLocaleString()}
+      </div>
+      ${payout.reference ? `
+        <div style="font-size:12px;color:#888;margin-top:8px;">
+          Reference: ${payout.reference}
+        </div>
+      ` : ''}
+    </div>
+
+    <h3 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:0.5px;">
+      Included in this payout
+    </h3>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${itemsHtml}
+    </table>
+
+    ${payout.notes ? `
+      <div style="background:#f5f5f0;border-radius:10px;padding:14px 20px;margin-bottom:24px;border:1px solid #e0ddd8;">
+        <div style="font-size:13px;color:#666;line-height:1.6;">${payout.notes}</div>
+      </div>
+    ` : ''}
+
+    <p style="margin:0;font-size:13px;color:#888;">
+      Allow 1-2 business days for the funds to reflect in your account.
+    </p>
+  `;
+
+  return sendEmail({
+    to: sellerEmail,
+    subject: `Payout of R${payout.amount.toLocaleString()} sent | Halfsec`,
+    html: emailWrapper(content),
+  });
+};

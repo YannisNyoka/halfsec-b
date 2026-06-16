@@ -5,6 +5,7 @@ import {
 } from '../controllers/productController.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 import { productValidator } from '../middleware/validators.js';
+import { getPendingProducts, moderateProduct } from '../controllers/productController.js';
 
 const router = express.Router();
 
@@ -15,5 +16,6 @@ router.post('/', protect, adminOnly, productValidator, createProduct);
 router.patch('/:id', protect, adminOnly, updateProduct);
 router.patch('/:id/featured', protect, adminOnly, toggleFeatured);
 router.delete('/:id', protect, adminOnly, deleteProduct);
-
+router.get('/admin/pending', protect, adminOnly, getPendingProducts);
+router.patch('/admin/:id/moderate', protect, adminOnly, moderateProduct);
 export default router;

@@ -9,7 +9,7 @@ export const getProducts = async (req, res) => {
       maxPrice, featured, sort, page = 1, limit = 12,
     } = req.query;
 
-    const filter = { isActive: true, stock: { $gt: 0 } };
+    const filter = { isActive: true, moderationStatus: 'approved', stock: { $gt: 0 }, };
 
     if (search) {
       filter.$text = { $search: search };
@@ -39,6 +39,7 @@ export const getProducts = async (req, res) => {
     const [products, total] = await Promise.all([
       Product.find(filter)
         .populate('category', 'name slug')
+        .populate('seller', 'name sellerProfile.businessName sellerProfile.rating')
         .sort(sortBy)
         .skip(skip)
         .limit(limitNum)
@@ -64,7 +65,8 @@ export const getProducts = async (req, res) => {
 export const getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({ slug: req.params.slug, isActive: true })
-      .populate('category', 'name slug');
+      .populate('category', 'name slug')
+      .populate('seller', 'name sellerProfile.businessName sellerProfile.rating');
     if (!product) return res.status(404).json({ message: 'Product not found.' });
     res.status(200).json({ product });
   } catch (error) {
@@ -83,6 +85,7 @@ export const getAllProductsAdmin = async (req, res) => {
     const [products, total] = await Promise.all([
       Product.find()
         .populate('category', 'name')
+        .populate('seller', 'name sellerProfile.businessName sellerProfile.rating')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -107,6 +110,7 @@ export const createProduct = async (req, res) => {
 
     const product = await Product.create(req.body);
     await product.populate('category', 'name slug');
+    await product.populate('seller', 'name sellerProfile.businessName sellerProfile.rating');
     res.status(201).json({ message: 'Product created.', product });
   } catch (error) {
     if (error.code === 11000) {
@@ -126,7 +130,8 @@ export const updateProduct = async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    ).populate('category', 'name slug');
+    ).populate('category', 'name slug')
+     .populate('seller', 'name sellerProfile.businessName sellerProfile.rating');
 
     if (!product) return res.status(404).json({ message: 'Product not found.' });
     res.status(200).json({ message: 'Product updated.', product });
@@ -154,6 +159,46 @@ export const toggleFeatured = async (req, res) => {
     product.isFeatured = !product.isFeatured;
     await product.save();
     res.status(200).json({ message: `Product ${product.isFeatured ? 'featured' : 'unfeatured'}.`, product });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── Admin: get products pending moderation ───────────────────────────────────────
+export const getPendingProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ moderationStatus: 'pending' })
+      .populate('seller', 'name sellerProfile.businessName')
+      .populate('category', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ products });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── Admin: approve/reject a product listing ───────────────────────────────────────
+export const moderateProduct = async (req, res) => {
+  try {
+    const { action, note } = req.body; // 'approve' | 'reject'
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
+
+    if (action === 'approve') {
+      product.moderationStatus = 'approved';
+      product.isActive = true;
+    } else if (action === 'reject') {
+      product.moderationStatus = 'rejected';
+      product.isActive = false;
+      product.moderationNote = note?.trim() || '';
+    } else {
+      return res.status(400).json({ message: 'Invalid action.' });
+    }
+
+    await product.save();
+    res.status(200).json({ message: `Product ${action}d.`, product });
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });
   }

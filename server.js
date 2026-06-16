@@ -22,6 +22,10 @@ import aiRoutes from './routes/aiRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
 import sellerRoutes from './routes/sellerRoutes.js';
 import adminSellerRoutes from './routes/adminSellerRoutes.js';
+import escrowRoutes from './routes/escrowRoutes.js';
+import { startAutoReleaseCron } from './utils/autoReleaseCron.js';
+import payoutRoutes from './routes/payoutRoutes.js';
+import sellerRatingRoutes from './routes/sellerRatingRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -105,6 +109,9 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/sellers', sellerRoutes);
 app.use('/api/admin/sellers', adminSellerRoutes);
+app.use('/api/escrow', escrowRoutes);
+app.use('/api/payouts', payoutRoutes);
+app.use('/api/seller-ratings', sellerRatingRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });
@@ -118,6 +125,7 @@ connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   });
+  startAutoReleaseCron();
 }).catch((err) => {
   console.error('Failed to connect to database:', err.message);
   process.exit(1);

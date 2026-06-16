@@ -6,6 +6,7 @@ import { validationResult } from 'express-validator';
 import { sendOrderConfirmation, sendAdminOrderAlert, sendOrderStatusUpdate } from '../utils/email.js';
 import Coupon from '../models/Coupon.js';
 import { calculateProtectionFee, groupItemsBySeller } from '../utils/fees.js';
+import { calculateAutoReleaseDate } from '../utils/escrow.js';
 
 // ── Place order ────────────────────────────────────────────────────────────────
 export const placeOrder = async (req, res) => {
@@ -97,6 +98,7 @@ const subOrders = Object.entries(grouped).map(([sellerKey, items]) => ({
   })),
   subtotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
   escrowStatus: 'held',
+  autoReleaseAt: calculateAutoReleaseDate(new Date()), // Set auto-release date
 }));
     
 
@@ -210,22 +212,10 @@ export const getOrderAdmin = async (req, res) => {
 // ── Update order status (admin) ────────────────────────────────────────────────
 export const updateOrderStatus = async (req, res) => {
   try {
-    const {
-      orderStatus,
-      paymentStatus,
-      trackingNumber,
-      courierName,
-      estimatedDelivery,
-      statusMessage,
-    } = req.body;
+    const { orderStatus, paymentStatus } = req.body;
 
-    const validOrderStatuses = [
-      'pending', 'confirmed', 'processing',
-      'shipped', 'delivered', 'cancelled',
-    ];
-    const validPaymentStatuses = [
-      'pending', 'paid', 'failed', 'refunded',
-    ];
+    const validOrderStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+    const validPaymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
 
     if (orderStatus && !validOrderStatuses.includes(orderStatus)) {
       return res.status(400).json({ message: 'Invalid order status.' });
@@ -234,56 +224,42 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid payment status.' });
     }
 
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate('user', 'name email');
     if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-    // Build updates
     if (orderStatus) order.orderStatus = orderStatus;
     if (paymentStatus) {
       order.paymentStatus = paymentStatus;
       if (paymentStatus === 'paid') order.paidAt = new Date();
     }
-    if (orderStatus === 'delivered') order.deliveredAt = new Date();
-    if (trackingNumber !== undefined) order.trackingNumber = trackingNumber;
-    if (courierName !== undefined) order.courierName = courierName;
-    if (estimatedDelivery !== undefined) order.estimatedDelivery = estimatedDelivery;
 
-    // Add timeline entry
-    const defaultMessages = {
-      pending: 'Order received and awaiting confirmation.',
-      confirmed: 'Your order has been confirmed.',
-      processing: 'Your order is being packed.',
-      shipped: trackingNumber
-        ? `Your order has been shipped. Tracking: ${trackingNumber}`
-        : 'Your order is on its way.',
-      delivered: 'Your order has been delivered.',
-      cancelled: 'Your order has been cancelled.',
-    };
+    if (orderStatus === 'delivered') {
+      const now = new Date();
+      order.deliveredAt = now;
 
-    if (orderStatus) {
-      order.timeline.push({
-        status: orderStatus,
-        message: statusMessage || defaultMessages[orderStatus],
-        timestamp: new Date(),
-        updatedBy: req.user.id,
+      // Stamp delivery + auto-release date on each sub-order still held
+      order.subOrders.forEach((sub) => {
+        if (sub.escrowStatus === 'held') {
+          sub.deliveredAt = now;
+          sub.autoReleaseAt = calculateAutoReleaseDate(now);
+        }
       });
     }
 
     await order.save();
-    await order.populate('user', 'name email');
 
-    // Send status email
+    // Send status update email — non-blocking
     try {
       if (orderStatus && order.user?.email) {
         sendOrderStatusUpdate(order, order.user.email, order.user.name);
       }
     } catch (emailErr) {
-      console.error('Status email failed:', emailErr.message);
+      console.error('Status email failed (non-fatal):', emailErr.message);
     }
 
     res.status(200).json({ message: 'Order updated.', order });
   } catch (error) {
-    console.error('Update order error:', error);
+    console.error('Update order status error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

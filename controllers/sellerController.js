@@ -158,8 +158,13 @@ export const createSellerProduct = async (req, res) => {
     const product = await Product.create({
       ...req.body,
       seller: req.user.id,
+      moderationStatus: 'pending', // new seller listings need approval
+      isActive: false, // hidden until approved
     });
-    res.status(201).json({ message: 'Product listed.', product });
+    res.status(201).json({
+      message: 'Product submitted for review. It will appear in the shop once approved.',
+      product,
+    });
   } catch (error) {
     console.error('Create seller product error:', error);
     res.status(500).json({ message: 'Server error.' });
