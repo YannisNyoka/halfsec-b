@@ -29,6 +29,10 @@ import sellerRatingRoutes from './routes/sellerRatingRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import sellerAnalyticsRoutes from './routes/sellerAnalyticsRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
+import savedSearchRoutes from './routes/savedSearchRoutes.js';
+import offerRoutes from './routes/offerRoutes.js';
+import { checkPriceAlerts, checkSavedSearchAlerts } from './controllers/savedSearchController.js';
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -118,6 +122,8 @@ app.use('/api/seller-ratings', sellerRatingRoutes);
 app.use('/api/seller-analytics', sellerAnalyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/watchlist', savedSearchRoutes);
+app.use('/api/offers', offerRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });

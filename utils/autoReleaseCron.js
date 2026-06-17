@@ -3,6 +3,7 @@ import Order from '../models/Order.js';
 import User from '../models/User.js';
 import { sendFundsReleasedToSellerEmail, sendReviewReminderEmail } from './email.js';
 import { REMINDER_DAY } from './escrow.js';
+import { checkPriceAlerts, checkSavedSearchAlerts } from '../controllers/savedSearchController.js';
 
 // ── Auto-release funds past their review window ─────────────────────────────────
 const runAutoRelease = async () => {
@@ -93,6 +94,8 @@ export const startAutoReleaseCron = () => {
     console.log('[cron] Running escrow auto-release check...');
     runAutoRelease();
     runReviewReminders();
+    checkPriceAlerts();
+  checkSavedSearchAlerts();
   });
 
   console.log('[cron] Escrow auto-release scheduled (daily 03:00).');
