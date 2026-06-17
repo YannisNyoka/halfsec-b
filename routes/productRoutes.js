@@ -6,10 +6,12 @@ import {
 import { protect, adminOnly } from '../middleware/auth.js';
 import { productValidator } from '../middleware/validators.js';
 import { getPendingProducts, moderateProduct } from '../controllers/productController.js';
+import { getSearchSuggestions } from '../controllers/productController.js';
 
 const router = express.Router();
 
 router.get('/', getProducts);
+router.get('/suggestions', getSearchSuggestions);
 router.get('/slug/:slug', getProductBySlug);
 router.get('/admin/all', protect, adminOnly, getAllProductsAdmin);
 router.post('/', protect, adminOnly, productValidator, createProduct);

@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import { sendSellerApplicationReceived, sendSellerApprovalEmail } from '../utils/email.js';
+import { notifySellerApproved, notifySellerRejected } from '../utils/notify.js';
 
 // ── Apply to become a seller ───────────────────────────────────────────────────
 export const applyAsSeller = async (req, res) => {
@@ -321,6 +322,7 @@ export const approveSeller = async (req, res) => {
     user.sellerProfile.status = 'approved';
     user.sellerProfile.approvedAt = new Date();
     await user.save();
+    notifySellerApproved(user._id);
 
     try {
       sendSellerApprovalEmail(user.email, user.name);
@@ -344,7 +346,7 @@ export const rejectSeller = async (req, res) => {
     user.sellerProfile.status = 'rejected';
     user.sellerProfile.rejectionReason = reason || '';
     await user.save();
-
+    notifySellerRejected(user._id);
     res.status(200).json({ message: 'Application rejected.' });
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });

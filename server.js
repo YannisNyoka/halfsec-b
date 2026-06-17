@@ -26,6 +26,9 @@ import escrowRoutes from './routes/escrowRoutes.js';
 import { startAutoReleaseCron } from './utils/autoReleaseCron.js';
 import payoutRoutes from './routes/payoutRoutes.js';
 import sellerRatingRoutes from './routes/sellerRatingRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import sellerAnalyticsRoutes from './routes/sellerAnalyticsRoutes.js';
+import pushRoutes from './routes/pushRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -107,12 +110,14 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/customers', customerRoutes);
-app.use('/api/sellers', sellerRoutes);
+app.use('/api/seller', sellerRoutes);
 app.use('/api/admin/sellers', adminSellerRoutes);
 app.use('/api/escrow', escrowRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/seller-ratings', sellerRatingRoutes);
-app.use('/api/seller', sellerRoutes);
+app.use('/api/seller-analytics', sellerAnalyticsRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/push', pushRoutes);
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });

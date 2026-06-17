@@ -1,54 +1,105 @@
 import Product from '../models/Product.js';
 import { validationResult } from 'express-validator';
+import Category from '../models/Category.js';
 
 // ── Get all active products with filtering, search, pagination (public) ────────
 export const getProducts = async (req, res) => {
   try {
     const {
-      search, category, condition, minPrice,
-      maxPrice, featured, sort, page = 1, limit = 12,
+      search,
+      category,
+      condition,
+      minPrice,
+      maxPrice,
+      sort = 'newest',
+      featured,
+      seller,
+      page = 1,
+      limit = 20,
+      inStock,
     } = req.query;
 
-    const filter = { isActive: true, $or: [
-    { moderationStatus: 'approved' },
-    { moderationStatus: { $exists: false } },
-    { moderationStatus: null },
-  ], stock: { $gt: 0 }, };
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
 
-    if (search) {
-      filter.$text = { $search: search };
+    // ── Build filter ─────────────────────────────────────────────────────────────
+    const filter = {
+      isActive: true,
+      $or: [
+        { moderationStatus: 'approved' },
+        { moderationStatus: { $exists: false } },
+        { moderationStatus: null },
+      ],
+    };
+
+    // Full-text search across name, description, tags
+    if (search?.trim()) {
+      const regex = new RegExp(search.trim().split(/\s+/).join('|'), 'i');
+      filter.$and = [
+        {
+          $or: [
+            { name: { $regex: search.trim(), $options: 'i' } },
+            { description: { $regex: search.trim(), $options: 'i' } },
+            { tags: { $in: [new RegExp(search.trim(), 'i')] } },
+          ],
+        },
+      ];
     }
+
     if (category) filter.category = category;
-    if (condition) filter.condition = condition;
-    if (featured === 'true') filter.isFeatured = true;
+
+    // Support multiple conditions: condition=good,like+new
+    if (condition) {
+      const conditions = condition.split(',').map((c) => c.trim());
+      filter.condition = { $in: conditions };
+    }
+
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = Number(minPrice);
       if (maxPrice) filter.price.$lte = Number(maxPrice);
     }
 
+    if (featured === 'true') filter.isFeatured = true;
+    if (seller) filter.seller = seller;
+    if (inStock === 'true') filter.stock = { $gt: 0 };
+
+    // ── Sort ─────────────────────────────────────────────────────────────────────
     const sortOptions = {
       newest: { createdAt: -1 },
       oldest: { createdAt: 1 },
-      'price-asc': { price: 1 },
-      'price-desc': { price: -1 },
+      price_asc: { price: 1 },
+      price_desc: { price: -1 },
       popular: { sold: -1 },
+      rating: { 'rating.average': -1 },
     };
-    const sortBy = sortOptions[sort] || { createdAt: -1 };
+    const sortQuery = sortOptions[sort] || sortOptions.newest;
 
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(50, parseInt(limit));
-    const skip = (pageNum - 1) * limitNum;
-
+    // ── Execute ───────────────────────────────────────────────────────────────────
     const [products, total] = await Promise.all([
       Product.find(filter)
-        .populate('category', 'name slug')
+        .populate('category', 'name')
         .populate('seller', 'name sellerProfile.businessName sellerProfile.rating')
-        .sort(sortBy)
+        .sort(sortQuery)
         .skip(skip)
         .limit(limitNum)
-        .select('-__v'),
+        .lean(),
       Product.countDocuments(filter),
+    ]);
+
+    // ── Price range for current filter (excluding price filter) ──────────────────
+    const priceFilter = { ...filter };
+    delete priceFilter.price;
+    const priceRange = await Product.aggregate([
+      { $match: priceFilter },
+      {
+        $group: {
+          _id: null,
+          min: { $min: '$price' },
+          max: { $max: '$price' },
+        },
+      },
     ]);
 
     res.status(200).json({
@@ -59,8 +110,12 @@ export const getProducts = async (req, res) => {
         pages: Math.ceil(total / limitNum),
         limit: limitNum,
       },
+      priceRange: priceRange[0]
+        ? { min: priceRange[0].min, max: priceRange[0].max }
+        : { min: 0, max: 10000 },
     });
   } catch (error) {
+    console.error('Get products error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };
@@ -203,6 +258,53 @@ export const moderateProduct = async (req, res) => {
 
     await product.save();
     res.status(200).json({ message: `Product ${action}d.`, product });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+export const getSearchSuggestions = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q?.trim() || q.trim().length < 2) {
+      return res.status(200).json({ suggestions: [] });
+    }
+
+    const regex = new RegExp(q.trim(), 'i');
+
+    const [products, categories] = await Promise.all([
+      Product.find({
+        isActive: true,
+        $or: [
+          { name: { $regex: regex } },
+          { tags: { $in: [regex] } },
+        ],
+      })
+        .select('name images price slug condition')
+        .limit(5)
+        .lean(),
+      Category.find({ name: { $regex: regex } })
+        .select('name')
+        .limit(3)
+        .lean(),
+    ]);
+
+    // Also get matching tags
+    const tagResults = await Product.aggregate([
+      { $match: { isActive: true, tags: { $in: [regex] } } },
+      { $unwind: '$tags' },
+      { $match: { tags: { $regex: regex } } },
+      { $group: { _id: '$tags' } },
+      { $limit: 4 },
+    ]);
+
+    res.status(200).json({
+      suggestions: {
+        products,
+        categories,
+        tags: tagResults.map((t) => t._id),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });
   }

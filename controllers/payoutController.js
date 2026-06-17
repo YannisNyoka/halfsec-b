@@ -3,6 +3,8 @@ import Payout from '../models/Payout.js';
 import User from '../models/User.js';
 import { getSellerBalance, getAllSellerBalances } from '../utils/ledger.js';
 import { sendPayoutProcessedEmail } from '../utils/email.js';
+import { notifyPayoutProcessed } from '../utils/notify.js';
+import { pushPayoutProcessed } from '../utils/pushNotify.js';
 
 // ── Seller: get my balance ───────────────────────────────────────────────────────
 export const getMyBalance = async (req, res) => {
@@ -129,6 +131,8 @@ export const recordPayout = async (req, res) => {
       await order.save();
     }
 
+    notifyPayoutProcessed(sellerId, totalAmount);
+    pushPayoutProcessed(sellerId, totalAmount);
     try {
       sendPayoutProcessedEmail(seller.email, seller.name, payout);
     } catch {}

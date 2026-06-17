@@ -6,6 +6,12 @@ import {
   sendFundsReleasedToSellerEmail,
 } from '../utils/email.js';
 import { processYocoRefund } from '../utils/yocoRefund.js';
+import {
+  notifyEscrowReleased,
+  notifyDisputeRaised,
+  notifyDisputeResolved,
+} from '../utils/notify.js';
+import { pushEscrowReleased, pushDisputeResolved } from '../utils/pushNotify.js';
 
 // ── Buyer: confirm receipt for a sub-order ───────────────────────────────────────
 export const confirmReceipt = async (req, res) => {
@@ -31,6 +37,8 @@ export const confirmReceipt = async (req, res) => {
     sub.escrowStatus = 'released';
     sub.releasedAt = new Date();
     await order.save();
+    if (sub.seller) notifyEscrowReleased(sub.seller, order.orderNumber, order._id);
+    if (sub.seller) pushEscrowReleased(sub.seller, order.orderNumber, order._id);
 
     // Notify seller their funds were released
     try {
@@ -80,6 +88,10 @@ export const raiseDispute = async (req, res) => {
       resolution: 'none',
     };
     await order.save();
+
+    // Notify admin — get admin user id
+const adminUser = await User.findOne({ role: 'admin' }).select('_id');
+if (adminUser) notifyDisputeRaised(adminUser._id, order.orderNumber, order._id);
 
     // Notify admin
     try {
@@ -207,6 +219,15 @@ export const resolveDispute = async (req, res) => {
     }
 
     await order.save();
+    notifyDisputeResolved(order.user._id, order.orderNumber, order._id, resolution);
+if (resolution === 'released_to_seller' && sub.seller) {
+  notifyEscrowReleased(sub.seller, order.orderNumber, order._id);
+}
+
+pushDisputeResolved(order.user._id, order.orderNumber);
+if (resolution === 'released_to_seller' && sub.seller) {
+  pushEscrowReleased(sub.seller, order.orderNumber);
+}
 
     try {
       sendDisputeResolvedEmail(order, sub, resolution);
