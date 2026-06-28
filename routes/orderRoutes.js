@@ -6,6 +6,7 @@ import {
 import { protect, adminOnly } from '../middleware/auth.js';
 import { orderValidator } from '../middleware/validators.js';
 import { getCheckoutPreview } from '../controllers/orderController.js';
+import { addTracking } from '../controllers/orderController.js';
 const router = express.Router();
 
 // Customer routes
@@ -13,6 +14,7 @@ router.post('/', protect, orderValidator, placeOrder);
 router.get('/my-orders', protect, getMyOrders);
 router.get('/checkout-preview', protect, getCheckoutPreview);
 router.get('/my-orders/:id', protect, getMyOrder);
+router.patch('/:id/tracking', protect, addTracking);
 
 // Admin routes
 router.get('/admin/all', protect, adminOnly, getAllOrders);
