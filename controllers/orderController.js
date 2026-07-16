@@ -154,19 +154,17 @@ if (couponDoc && discountAmount > 0) {
       console.error('Email send failed (non-fatal):', emailErr.message);
     }
 
-    // Notify buyer
+ // Notify buyer
 notifyOrderPlaced(req.user.id, order.orderNumber, order._id);
-
 pushOrderPlaced(req.user.id, order.orderNumber, order._id);
-for (const sellerId of sellerIds) {
-  pushNewSale(sellerId, order.orderNumber, order._id);
-}
-
 
 // Notify each seller whose items were bought
-const sellerIds = [...new Set(orderItems.filter((i) => i.seller).map((i) => i.seller.toString()))];
+const sellerIds = [...new Set(
+  orderItems.filter((i) => i.seller).map((i) => i.seller.toString())
+)];
 for (const sellerId of sellerIds) {
   notifyNewOrderSeller(sellerId, order.orderNumber, order._id);
+  pushNewSale(sellerId, order.orderNumber, order._id);
 }
 
     res.status(201).json({ message: 'Order placed successfully.', order });
