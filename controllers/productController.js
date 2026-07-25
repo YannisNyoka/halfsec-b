@@ -259,7 +259,15 @@ export const moderateProduct = async (req, res) => {
     await product.save();
     res.status(200).json({ message: `Product ${action}d.`, product });
   } catch (error) {
-    res.status(500).json({ message: 'Server error.' });
+    // Log the FULL error so we can see exactly what's failing
+    console.error('MODERATE PRODUCT ERROR:', error);
+    if (error.name === 'ValidationError') {
+      console.error('Validation details:', JSON.stringify(error.errors, null, 2));
+      return res.status(400).json({
+        message: 'Validation failed: ' + Object.values(error.errors).map(e => e.message).join(', '),
+      });
+    }
+    res.status(500).json({ message: error.message || 'Server error.' });
   }
 };
 

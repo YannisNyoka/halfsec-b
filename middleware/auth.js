@@ -61,3 +61,15 @@ export const sellerOnly = (req, res, next) => {
   }
   next();
 };
+
+export const adminOrSeller = (req, res, next) => {
+  const isAdmin = req.user?.role === 'admin';
+  const isApprovedSeller = req.user?.sellerProfile?.status === 'approved';
+
+  if (!isAdmin && !isApprovedSeller) {
+    return res.status(403).json({
+      message: 'You must be an admin or approved seller to upload images.',
+    });
+  }
+  next();
+};

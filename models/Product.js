@@ -90,7 +90,7 @@ lowStockThreshold: {
 
 // Auto-generate unique slug from name
 productSchema.pre('save', async function () {
-  if (!this.isModified('name')) return next();
+  if (!this.isModified('name')) return;
 
   let slug = this.name
     .toLowerCase()
