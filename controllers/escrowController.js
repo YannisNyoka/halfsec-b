@@ -117,8 +117,11 @@ export const getDisputes = async (req, res) => {
     if (status === 'open') resolutionFilter = 'none';
     else if (status === 'resolved') resolutionFilter = { $ne: 'none' };
 
+    // A sub-order "has a dispute" once one is raised, regardless of its current
+    // escrowStatus — resolving a dispute moves escrowStatus to 'released' or
+    // 'refunded', so matching on 'disputed' here would hide every resolved case.
     const matchStage = {
-      'subOrders.escrowStatus': 'disputed',
+      'subOrders.dispute.raisedAt': { $exists: true },
       ...(resolutionFilter !== undefined
         ? { 'subOrders.dispute.resolution': resolutionFilter }
         : {}),
@@ -132,7 +135,7 @@ export const getDisputes = async (req, res) => {
     const disputes = [];
     for (const order of orders) {
       for (const sub of order.subOrders) {
-        if (sub.escrowStatus !== 'disputed') continue;
+        if (!sub.dispute?.raisedAt) continue;
         if (status === 'open' && sub.dispute?.resolution !== 'none') continue;
         if (status === 'resolved' && sub.dispute?.resolution === 'none') continue;
 

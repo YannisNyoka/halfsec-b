@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Order from '../models/Order.js';
+import { verifyYocoWebhook } from '../utils/verifyYocoWebhook.js';
 
 const YOCO_API = 'https://payments.yoco.com/api';
 
@@ -72,11 +73,23 @@ export const createCheckoutSession = async (req, res) => {
 // ── Yoco webhook — payment confirmation ────────────────────────────────────────
 export const yocoWebhook = async (req, res) => {
   try {
-    const event = typeof req.body === 'string' 
-  ? JSON.parse(req.body) 
-  : Buffer.isBuffer(req.body) 
-    ? JSON.parse(req.body.toString()) 
-    : req.body;
+    // Signature verification requires the exact raw bytes Yoco signed —
+    // if this isn't a Buffer, express.raw() isn't mounted on this route anymore.
+    if (!Buffer.isBuffer(req.body)) {
+      console.error('Yoco webhook received a parsed body — check express.raw() is applied to this route.');
+      return res.status(500).json({ message: 'Webhook misconfigured.' });
+    }
+
+    const rawBody = req.body.toString('utf8');
+
+    try {
+      verifyYocoWebhook(req.headers, rawBody);
+    } catch (verifyErr) {
+      console.error('Yoco webhook signature verification failed:', verifyErr.message);
+      return res.status(401).json({ message: 'Invalid webhook signature.' });
+    }
+
+    const event = JSON.parse(rawBody);
 
     console.log('Yoco webhook event:', event.type);
 

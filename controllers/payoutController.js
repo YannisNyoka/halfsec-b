@@ -81,31 +81,34 @@ export const recordPayout = async (req, res) => {
     const now = new Date();
 
     for (const { orderId, subOrderId } of subOrderIds) {
-      const order = await Order.findById(orderId);
-      if (!order) continue;
+      // Atomically claim this sub-order: the filter re-checks seller/released/unpaid
+      // at write time, so two concurrent payout requests can't both claim the same
+      // sub-order the way a read-then-save race would allow.
+      const claimed = await Order.findOneAndUpdate(
+        {
+          _id: orderId,
+          subOrders: {
+            $elemMatch: {
+              _id: subOrderId,
+              seller: sellerId,
+              escrowStatus: 'released',
+              paidOutAt: { $exists: false },
+            },
+          },
+        },
+        { $set: { 'subOrders.$.paidOutAt': now } },
+        { returnDocument: 'after' }
+      );
 
-      const sub = order.subOrders.id(subOrderId);
-      if (!sub) continue;
+      if (!claimed) continue;
 
-      // Validate: must belong to this seller, be released, and not already paid out
-      if (
-        !sub.seller ||
-        sub.seller.toString() !== sellerId ||
-        sub.escrowStatus !== 'released' ||
-        sub.paidOutAt
-      ) {
-        continue;
-      }
-
+      const sub = claimed.subOrders.id(subOrderId);
       totalAmount += sub.subtotal;
       payoutSubOrders.push({
-        order: order._id,
+        order: claimed._id,
         subOrderId: sub._id,
         amount: sub.subtotal,
       });
-
-      sub.paidOutAt = now;
-      await order.save();
     }
 
     if (payoutSubOrders.length === 0) {
