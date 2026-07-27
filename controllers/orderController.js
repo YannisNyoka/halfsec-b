@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Cart from '../models/Cart.js';
 import Product from '../models/Product.js';
@@ -54,47 +55,69 @@ export const placeOrder = async (req, res) => {
       quantity: item.quantity,
     }));
 
-    // Handle coupon
-let discountAmount = 0;
-let couponDoc = null;
-
-if (req.body.couponCode) {
-  couponDoc = await Coupon.findOne({
-    code: req.body.couponCode.toUpperCase().trim(),
-    isActive: true,
-  });
-
-  if (couponDoc) {
-    const now = new Date();
-    const expired = couponDoc.expiresAt && now > couponDoc.expiresAt;
-    const notStarted = couponDoc.startsAt && now < couponDoc.startsAt;
-    const limitReached = couponDoc.usageLimit !== null &&
-      couponDoc.usageCount >= couponDoc.usageLimit;
-    const userUsed = couponDoc.usedBy.filter(
-      (u) => u.user.toString() === req.user.id
-    ).length >= couponDoc.userUsageLimit;
-
-    if (!expired && !notStarted && !limitReached && !userUsed &&
-        itemsTotal >= couponDoc.minOrderAmount) {
-      if (couponDoc.type === 'percentage') {
-        discountAmount = (itemsTotal * couponDoc.value) / 100;
-        if (couponDoc.maxDiscount) {
-          discountAmount = Math.min(discountAmount, couponDoc.maxDiscount);
-        }
-      } else {
-        discountAmount = Math.min(couponDoc.value, itemsTotal);
-      }
-      discountAmount = Math.round(discountAmount * 100) / 100;
-    }
-  }
-}
-
-
-
     const itemsTotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-const buyerProtectionFee = calculateProtectionFee(itemsTotal);
-const shippingCost = itemsTotal >= 500 ? 0 : 80;
-const total = itemsTotal + buyerProtectionFee + shippingCost;
+
+    // Handle coupon — claimed atomically (single conditional findOneAndUpdate) so
+    // two concurrent checkouts can't both redeem the last remaining use, or the
+    // same user's one-per-customer use. A claim that fails (limit hit concurrently,
+    // or the coupon was never valid) just means no discount — it never blocks the order.
+    let discountAmount = 0;
+    let claimedCoupon = null;
+
+    if (req.body.couponCode) {
+      const now = new Date();
+      const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+
+      claimedCoupon = await Coupon.findOneAndUpdate(
+        {
+          $and: [
+            { code: req.body.couponCode.toUpperCase().trim() },
+            { isActive: true },
+            { minOrderAmount: { $lte: itemsTotal } },
+            { $or: [{ startsAt: null }, { startsAt: { $lte: now } }] },
+            { $or: [{ expiresAt: null }, { expiresAt: { $gte: now } }] },
+            { $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }] },
+            {
+              $expr: {
+                $lt: [
+                  {
+                    $size: {
+                      $filter: {
+                        input: '$usedBy',
+                        as: 'u',
+                        cond: { $eq: ['$$u.user', userObjectId] },
+                      },
+                    },
+                  },
+                  '$userUsageLimit',
+                ],
+              },
+            },
+          ],
+        },
+        {
+          $inc: { usageCount: 1 },
+          $push: { usedBy: { user: userObjectId, usedAt: now } },
+        },
+        { returnDocument: 'after' }
+      );
+
+      if (claimedCoupon) {
+        if (claimedCoupon.type === 'percentage') {
+          discountAmount = (itemsTotal * claimedCoupon.value) / 100;
+          if (claimedCoupon.maxDiscount) {
+            discountAmount = Math.min(discountAmount, claimedCoupon.maxDiscount);
+          }
+        } else {
+          discountAmount = Math.min(claimedCoupon.value, itemsTotal);
+        }
+        discountAmount = Math.round(discountAmount * 100) / 100;
+      }
+    }
+
+    const buyerProtectionFee = calculateProtectionFee(itemsTotal);
+    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const total = Math.max(0, itemsTotal + buyerProtectionFee + shippingCost - discountAmount);
 
 // Group items by seller for sub-order tracking
 const grouped = groupItemsBySeller(orderItems);
@@ -120,18 +143,13 @@ const order = await Order.create({
   shippingAddress,
   paymentMethod,
   itemsTotal,
+  discountAmount,
+  couponCode: claimedCoupon ? claimedCoupon.code : null,
   buyerProtectionFee,
   shippingCost,
   total,
   notes,
 });
-
-// Mark coupon as used
-if (couponDoc && discountAmount > 0) {
-  couponDoc.usageCount += 1;
-  couponDoc.usedBy.push({ user: req.user.id });
-  await couponDoc.save();
-}
 
     await Promise.all(
       cart.items.map((item) =>

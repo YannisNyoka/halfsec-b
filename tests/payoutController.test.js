@@ -6,6 +6,7 @@ import { connectTestDb, disconnectTestDb, clearTestDb } from './helpers/testDb.j
 import { installFetchMock, restoreFetch } from './helpers/mockFetch.js';
 import { mockReq, mockRes } from './helpers/mockReqRes.js';
 import { createUser, createOrder } from './helpers/fixtures.js';
+import { waitFor } from './helpers/waitFor.js';
 
 import Order from '../models/Order.js';
 import Payout from '../models/Payout.js';
@@ -62,7 +63,7 @@ describe('recordPayout', () => {
     assert.equal(balance.available, 0);
     assert.equal(balance.paidOut, 100);
 
-    const notifications = await Notification.find({ user: seller._id, type: 'payout_processed' });
+    const notifications = await waitFor(() => Notification.find({ user: seller._id, type: 'payout_processed' }), (r) => r.length > 0);
     assert.equal(notifications.length, 1);
   });
 

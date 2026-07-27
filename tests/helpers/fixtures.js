@@ -1,6 +1,9 @@
 import mongoose from 'mongoose';
 import User from '../../models/User.js';
 import Order from '../../models/Order.js';
+import Category from '../../models/Category.js';
+import Product from '../../models/Product.js';
+import Cart from '../../models/Cart.js';
 
 export const createUser = (overrides = {}) =>
   User.create({
@@ -32,4 +35,29 @@ export const createOrder = async ({ buyerId, sellerId, subOrder = {}, order = {}
     shippingCost: 0,
     total: 100,
     ...order,
+  });
+
+export const createProduct = async ({ sellerId = null, price = 100, stock = 10, overrides = {} } = {}) => {
+  const category = await Category.create({ name: `Category ${new mongoose.Types.ObjectId()}` });
+  return Product.create({
+    name: 'Test Product',
+    description: 'A fine test product.',
+    price,
+    category: category._id,
+    seller: sellerId,
+    condition: 'good',
+    stock,
+    images: [{ url: 'http://img.test/p.jpg', publicId: 'test-public-id' }],
+    ...overrides,
+  });
+};
+
+export const createCartForUser = (userId, items) =>
+  Cart.create({
+    user: userId,
+    items: items.map(({ product, quantity = 1, priceAtAdd }) => ({
+      product: product._id,
+      quantity,
+      priceAtAdd: priceAtAdd ?? product.price,
+    })),
   });

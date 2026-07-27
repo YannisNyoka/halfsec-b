@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import { connectTestDb, disconnectTestDb, clearTestDb } from './helpers/testDb.js';
 import { installFetchMock, restoreFetch, setFetchHandler, resetFetchHandler } from './helpers/mockFetch.js';
 import { mockReq, mockRes } from './helpers/mockReqRes.js';
+import { waitFor } from './helpers/waitFor.js';
 
 import Order from '../models/Order.js';
 import Notification from '../models/Notification.js';
@@ -54,7 +55,7 @@ describe('confirmReceipt', () => {
     assert.equal(updated.subOrders[0].escrowStatus, 'released');
     assert.ok(updated.subOrders[0].releasedAt);
 
-    const notifications = await Notification.find({ user: seller._id });
+    const notifications = await waitFor(() => Notification.find({ user: seller._id }), (r) => r.length > 0);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].type, 'escrow_released');
   });
@@ -163,7 +164,7 @@ describe('raiseDispute', () => {
     assert.equal(sub.dispute.resolution, 'none');
     assert.equal(sub.dispute.raisedBy.toString(), buyer._id.toString());
 
-    const adminNotifications = await Notification.find({ user: admin._id });
+    const adminNotifications = await waitFor(() => Notification.find({ user: admin._id }), (r) => r.length > 0);
     assert.equal(adminNotifications.length, 1);
     assert.equal(adminNotifications[0].type, 'escrow_disputed');
   });
@@ -394,8 +395,8 @@ describe('resolveDispute', () => {
     assert.equal(sub.dispute.resolution, 'released_to_seller');
     assert.equal(sub.dispute.resolvedBy.toString(), admin._id.toString());
 
-    const buyerNotifications = await Notification.find({ user: buyer._id, type: 'dispute_resolved' });
-    const sellerNotifications = await Notification.find({ user: seller._id, type: 'escrow_released' });
+    const buyerNotifications = await waitFor(() => Notification.find({ user: buyer._id, type: 'dispute_resolved' }), (r) => r.length > 0);
+    const sellerNotifications = await waitFor(() => Notification.find({ user: seller._id, type: 'escrow_released' }), (r) => r.length > 0);
     assert.equal(buyerNotifications.length, 1);
     assert.equal(sellerNotifications.length, 1);
   });
