@@ -6,8 +6,11 @@ import {
   getSellerOffers,
   acceptOffer,
   declineOffer,
+  getOfferCheckout,
+  purchaseOffer,
 } from '../controllers/offerController.js';
 import { protect, sellerOnly } from '../middleware/auth.js';
+import { orderValidator } from '../middleware/validators.js';
 
 const router = express.Router();
 router.use(protect);
@@ -16,6 +19,8 @@ router.use(protect);
 router.post('/', makeOffer);
 router.get('/mine', getMyOffers);
 router.patch('/:id/withdraw', withdrawOffer);
+router.get('/:id/checkout', getOfferCheckout);
+router.post('/:id/checkout', orderValidator, purchaseOffer);
 
 // Seller
 router.get('/seller', sellerOnly, getSellerOffers);

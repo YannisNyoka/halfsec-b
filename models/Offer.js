@@ -22,7 +22,7 @@ const offerSchema = new mongoose.Schema(
     message: { type: String, trim: true, maxlength: 500, default: '' },
     status: {
       type: String,
-      enum: ['pending', 'accepted', 'declined', 'expired', 'withdrawn'],
+      enum: ['pending', 'accepted', 'declined', 'expired', 'withdrawn', 'purchased'],
       default: 'pending',
     },
     expiresAt: {

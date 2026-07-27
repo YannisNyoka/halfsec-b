@@ -1,13 +1,13 @@
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Cart from '../models/Cart.js';
-import Product from '../models/Product.js';
 import User from '../models/User.js';
 import { validationResult } from 'express-validator';
 import { sendOrderConfirmation, sendAdminOrderAlert, sendOrderStatusUpdate } from '../utils/email.js';
 import Coupon from '../models/Coupon.js';
 import { calculateProtectionFee, groupItemsBySeller } from '../utils/fees.js';
 import { calculateAutoReleaseDate } from '../utils/escrow.js';
+import { claimStock } from '../utils/stock.js';
 import {
   notifyOrderPlaced,
   notifyOrderStatus,
@@ -60,31 +60,10 @@ export const placeOrder = async (req, res) => {
     // without a $gte condition on the decrement itself, two concurrent checkouts
     // for the last unit could both pass the earlier read-based check and both
     // decrement, driving stock negative (oversell).
-    const claimedStock = [];
-    let outOfStockItem = null;
-
-    for (const item of orderItems) {
-      const claimed = await Product.findOneAndUpdate(
-        { _id: item.product, stock: { $gte: item.quantity } },
-        { $inc: { stock: -item.quantity, sold: item.quantity } },
-        { returnDocument: 'after' }
-      );
-      if (!claimed) {
-        outOfStockItem = item;
-        break;
-      }
-      claimedStock.push({ productId: item.product, quantity: item.quantity });
-    }
-
-    if (outOfStockItem) {
-      // Release whatever this attempt already claimed before failing.
-      await Promise.all(
-        claimedStock.map(({ productId, quantity }) =>
-          Product.findByIdAndUpdate(productId, { $inc: { stock: quantity, sold: -quantity } })
-        )
-      );
+    const stockResult = await claimStock(orderItems);
+    if (!stockResult.success) {
       return res.status(400).json({
-        message: `"${outOfStockItem.name}" no longer has enough stock. Please update your cart.`,
+        message: `"${stockResult.failedItem.name}" no longer has enough stock. Please update your cart.`,
       });
     }
 

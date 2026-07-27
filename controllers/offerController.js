@@ -1,7 +1,14 @@
+import { validationResult } from 'express-validator';
 import Offer from '../models/Offer.js';
+import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import User from '../models/User.js';
-import { notify } from '../utils/notify.js';
+import { notify, notifyOrderPlaced, notifyNewOrderSeller } from '../utils/notify.js';
+import { pushOrderPlaced, pushNewSale } from '../utils/pushNotify.js';
+import { sendOrderConfirmation, sendAdminOrderAlert } from '../utils/email.js';
+import { calculateProtectionFee, groupItemsBySeller } from '../utils/fees.js';
+import { calculateAutoReleaseDate } from '../utils/escrow.js';
+import { claimStock } from '../utils/stock.js';
 
 // ── Buyer: make an offer ──────────────────────────────────────────────────────────
 export const makeOffer = async (req, res) => {
@@ -240,6 +247,155 @@ export const declineOffer = async (req, res) => {
 
     res.status(200).json({ message: 'Offer declined.', offer });
   } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── Buyer: get checkout summary for an accepted offer ──────────────────────────
+export const getOfferCheckout = async (req, res) => {
+  try {
+    const offer = await Offer.findOne({ _id: req.params.id, buyer: req.user.id })
+      .populate('product', 'name images price slug stock isActive');
+
+    if (!offer) return res.status(404).json({ message: 'Offer not found.' });
+
+    if (offer.status === 'purchased') {
+      return res.status(200).json({ alreadyPurchased: true, orderId: offer.order });
+    }
+
+    if (offer.status !== 'accepted') {
+      return res.status(400).json({ message: 'This offer is not available to purchase.' });
+    }
+
+    const itemsTotal = offer.offerPrice;
+    const buyerProtectionFee = calculateProtectionFee(itemsTotal);
+    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const total = itemsTotal + buyerProtectionFee + shippingCost;
+
+    res.status(200).json({ offer, itemsTotal, buyerProtectionFee, shippingCost, total });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── Buyer: complete a purchase at an accepted offer's negotiated price ─────────
+export const purchaseOffer = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ message: errors.array()[0].msg });
+
+    const { shippingAddress, paymentMethod, notes } = req.body;
+
+    const offer = await Offer.findOne({ _id: req.params.id, buyer: req.user.id })
+      .populate('product', 'name images price stock isActive seller');
+
+    if (!offer) return res.status(404).json({ message: 'Offer not found.' });
+
+    if (offer.status !== 'accepted') {
+      return res.status(409).json({ message: 'This offer is no longer available to purchase.' });
+    }
+
+    // Atomic claim: exclusively locks this offer for purchase, so a double-click
+    // or two open tabs can't both build an order from the same accepted offer —
+    // same idiom used to fix accept/decline/withdraw races earlier this session.
+    const claimedOffer = await Offer.findOneAndUpdate(
+      { _id: offer._id, buyer: req.user.id, status: 'accepted', order: null },
+      { $set: { status: 'purchased' } },
+      { returnDocument: 'after' }
+    );
+
+    if (!claimedOffer) {
+      return res.status(409).json({ message: 'This offer is no longer available to purchase.' });
+    }
+
+    const product = offer.product;
+
+    if (!product || !product.isActive) {
+      await Offer.updateOne(
+        { _id: offer._id, status: 'purchased', order: null },
+        { $set: { status: 'accepted' } }
+      );
+      return res.status(400).json({ message: 'This item is no longer available.' });
+    }
+
+    const orderItem = {
+      product: product._id,
+      seller: product.seller || null,
+      name: product.name,
+      image: product.images?.[0]?.url || '',
+      price: offer.offerPrice,
+      quantity: 1,
+    };
+
+    const stockResult = await claimStock([orderItem]);
+    if (!stockResult.success) {
+      await Offer.updateOne(
+        { _id: offer._id, status: 'purchased', order: null },
+        { $set: { status: 'accepted' } }
+      );
+      return res.status(400).json({ message: 'This item no longer has enough stock.' });
+    }
+
+    const itemsTotal = offer.offerPrice;
+    const buyerProtectionFee = calculateProtectionFee(itemsTotal);
+    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const total = itemsTotal + buyerProtectionFee + shippingCost;
+
+    const grouped = groupItemsBySeller([orderItem]);
+    const subOrders = Object.entries(grouped).map(([sellerKey, items]) => ({
+      seller: sellerKey === 'platform' ? null : sellerKey,
+      items: items.map((i) => ({
+        product: i.product,
+        name: i.name,
+        image: i.image,
+        price: i.price,
+        quantity: i.quantity,
+      })),
+      subtotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+      escrowStatus: 'held',
+      autoReleaseAt: calculateAutoReleaseDate(new Date()),
+    }));
+
+    const order = await Order.create({
+      user: req.user.id,
+      items: [orderItem],
+      subOrders,
+      shippingAddress,
+      paymentMethod,
+      itemsTotal,
+      discountAmount: 0,
+      couponCode: null,
+      buyerProtectionFee,
+      shippingCost,
+      total,
+      notes,
+      offer: offer._id,
+    });
+
+    await Offer.updateOne(
+      { _id: offer._id, status: 'purchased', order: null },
+      { $set: { order: order._id } }
+    );
+
+    // Send emails — non-blocking, failure won't break the order
+    try {
+      sendOrderConfirmation(order, req.user.email, req.user.name);
+      sendAdminOrderAlert(order, req.user.name, req.user.email);
+    } catch (emailErr) {
+      console.error('Email send failed (non-fatal):', emailErr.message);
+    }
+
+    notifyOrderPlaced(req.user.id, order.orderNumber, order._id);
+    pushOrderPlaced(req.user.id, order.orderNumber, order._id);
+
+    if (orderItem.seller) {
+      notifyNewOrderSeller(orderItem.seller.toString(), order.orderNumber, order._id);
+      pushNewSale(orderItem.seller.toString(), order.orderNumber, order._id);
+    }
+
+    res.status(201).json({ message: 'Purchase complete.', order });
+  } catch (error) {
+    console.error('Purchase offer error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

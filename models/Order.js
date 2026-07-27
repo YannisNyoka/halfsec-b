@@ -131,6 +131,9 @@ const orderSchema = new mongoose.Schema(
 
     paymentReference: { type: String },
     yocoCheckoutId: { type: String },
+
+    // Set when this order was created from an accepted offer rather than the cart.
+    offer: { type: mongoose.Schema.Types.ObjectId, ref: 'Offer', default: null },
   },
   { timestamps: true }
 );
