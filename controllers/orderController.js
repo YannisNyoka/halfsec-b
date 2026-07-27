@@ -55,6 +55,39 @@ export const placeOrder = async (req, res) => {
       quantity: item.quantity,
     }));
 
+    // Reserve stock atomically per item. The check above is advisory (a fast,
+    // friendly rejection before any writes); this is the authoritative guard —
+    // without a $gte condition on the decrement itself, two concurrent checkouts
+    // for the last unit could both pass the earlier read-based check and both
+    // decrement, driving stock negative (oversell).
+    const claimedStock = [];
+    let outOfStockItem = null;
+
+    for (const item of orderItems) {
+      const claimed = await Product.findOneAndUpdate(
+        { _id: item.product, stock: { $gte: item.quantity } },
+        { $inc: { stock: -item.quantity, sold: item.quantity } },
+        { returnDocument: 'after' }
+      );
+      if (!claimed) {
+        outOfStockItem = item;
+        break;
+      }
+      claimedStock.push({ productId: item.product, quantity: item.quantity });
+    }
+
+    if (outOfStockItem) {
+      // Release whatever this attempt already claimed before failing.
+      await Promise.all(
+        claimedStock.map(({ productId, quantity }) =>
+          Product.findByIdAndUpdate(productId, { $inc: { stock: quantity, sold: -quantity } })
+        )
+      );
+      return res.status(400).json({
+        message: `"${outOfStockItem.name}" no longer has enough stock. Please update your cart.`,
+      });
+    }
+
     const itemsTotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
     // Handle coupon — claimed atomically (single conditional findOneAndUpdate) so
@@ -150,14 +183,6 @@ const order = await Order.create({
   total,
   notes,
 });
-
-    await Promise.all(
-      cart.items.map((item) =>
-        Product.findByIdAndUpdate(item.product._id, {
-          $inc: { stock: -item.quantity, sold: item.quantity },
-        })
-      )
-    );
 
     await Cart.findOneAndDelete({ user: req.user.id });
 

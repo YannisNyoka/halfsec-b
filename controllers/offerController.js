@@ -41,7 +41,9 @@ export const makeOffer = async (req, res) => {
       });
     }
 
-    // Check for existing pending offer from this buyer
+    // Check for existing pending offer from this buyer — fast, friendly rejection
+    // before any write. The partial unique index on (product, buyer, status:'pending')
+    // is the actual guard against a double-submit race; this is just the UX fast path.
     const existing = await Offer.findOne({
       product: productId,
       buyer: req.user.id,
@@ -54,15 +56,25 @@ export const makeOffer = async (req, res) => {
       });
     }
 
-    const offer = await Offer.create({
-      product: productId,
-      buyer: req.user.id,
-      seller: product.seller._id,
-      offerPrice,
-      originalPrice: product.price,
-      message: message?.trim() || '',
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-    });
+    let offer;
+    try {
+      offer = await Offer.create({
+        product: productId,
+        buyer: req.user.id,
+        seller: product.seller._id,
+        offerPrice,
+        originalPrice: product.price,
+        message: message?.trim() || '',
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      });
+    } catch (err) {
+      if (err.code === 11000) {
+        return res.status(409).json({
+          message: 'You already have a pending offer on this item. Withdraw it first to make a new one.',
+        });
+      }
+      throw err;
+    }
 
     // Notify seller
     notify(product.seller._id, {
@@ -110,19 +122,17 @@ export const getMyOffers = async (req, res) => {
 // ── Buyer: withdraw an offer ──────────────────────────────────────────────────────
 export const withdrawOffer = async (req, res) => {
   try {
-    const offer = await Offer.findOne({
-      _id: req.params.id,
-      buyer: req.user.id,
-      status: 'pending',
-    });
+    // Atomic: the status:'pending' condition is checked and changed in one step,
+    // so this can't race a concurrent accept/decline into an inconsistent state.
+    const offer = await Offer.findOneAndUpdate(
+      { _id: req.params.id, buyer: req.user.id, status: 'pending' },
+      { $set: { status: 'withdrawn', respondedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
 
     if (!offer) {
       return res.status(404).json({ message: 'Pending offer not found.' });
     }
-
-    offer.status = 'withdrawn';
-    offer.respondedAt = new Date();
-    await offer.save();
 
     res.status(200).json({ message: 'Offer withdrawn.' });
   } catch (error) {
@@ -171,28 +181,35 @@ export const acceptOffer = async (req, res) => {
 
     if (!offer) return res.status(404).json({ message: 'Pending offer not found.' });
     if (offer.expiresAt < new Date()) {
-      offer.status = 'expired';
-      await offer.save();
+      // Only flip to expired if still pending — don't clobber a concurrent accept/decline.
+      await Offer.updateOne({ _id: offer._id, status: 'pending' }, { $set: { status: 'expired' } });
       return res.status(400).json({ message: 'This offer has expired.' });
     }
     if (offer.product.stock === 0) {
       return res.status(400).json({ message: 'This item is out of stock.' });
     }
 
-    offer.status = 'accepted';
-    offer.respondedAt = new Date();
-    offer.sellerNote = sellerNote?.trim() || '';
-    await offer.save();
+    // Atomic: only succeeds if the offer is still 'pending' at write time, so a
+    // double-click or a concurrent decline/withdraw can't both take effect.
+    const accepted = await Offer.findOneAndUpdate(
+      { _id: offer._id, status: 'pending' },
+      { $set: { status: 'accepted', respondedAt: new Date(), sellerNote: sellerNote?.trim() || '' } },
+      { returnDocument: 'after' }
+    ).populate('product', 'name price stock slug');
+
+    if (!accepted) {
+      return res.status(409).json({ message: 'This offer was already responded to.' });
+    }
 
     // Notify buyer
-    notify(offer.buyer, {
+    notify(accepted.buyer, {
       type: 'order_confirmed',
       title: '🎉 Offer accepted!',
-      message: `Your offer of R${offer.offerPrice.toLocaleString()} for "${offer.product.name}" was accepted. Complete your purchase now.`,
-      link: `/offers/${offer._id}/checkout`,
+      message: `Your offer of R${accepted.offerPrice.toLocaleString()} for "${accepted.product.name}" was accepted. Complete your purchase now.`,
+      link: `/offers/${accepted._id}/checkout`,
     });
 
-    res.status(200).json({ message: 'Offer accepted.', offer });
+    res.status(200).json({ message: 'Offer accepted.', offer: accepted });
   } catch (error) {
     console.error('Accept offer error:', error);
     res.status(500).json({ message: 'Server error.' });
@@ -204,18 +221,14 @@ export const declineOffer = async (req, res) => {
   try {
     const { sellerNote } = req.body;
 
-    const offer = await Offer.findOne({
-      _id: req.params.id,
-      seller: req.user.id,
-      status: 'pending',
-    }).populate('product', 'name');
+    // Atomic: only succeeds if the offer is still 'pending' at write time.
+    const offer = await Offer.findOneAndUpdate(
+      { _id: req.params.id, seller: req.user.id, status: 'pending' },
+      { $set: { status: 'declined', respondedAt: new Date(), sellerNote: sellerNote?.trim() || '' } },
+      { returnDocument: 'after' }
+    ).populate('product', 'name slug');
 
     if (!offer) return res.status(404).json({ message: 'Pending offer not found.' });
-
-    offer.status = 'declined';
-    offer.respondedAt = new Date();
-    offer.sellerNote = sellerNote?.trim() || '';
-    await offer.save();
 
     // Notify buyer
     notify(offer.buyer, {

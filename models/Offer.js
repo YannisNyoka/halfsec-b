@@ -41,7 +41,13 @@ const offerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-offerSchema.index({ product: 1, buyer: 1 });
+// Only one *pending* offer per buyer+product may exist at a time — enforced by
+// the database itself (partial unique index), not just the app-level pre-check
+// in makeOffer, which is racy against a double-submit on its own.
+offerSchema.index(
+  { product: 1, buyer: 1 },
+  { unique: true, partialFilterExpression: { status: 'pending' } }
+);
 offerSchema.index({ seller: 1, status: 1 });
 offerSchema.index({ buyer: 1, status: 1 });
 offerSchema.index({ expiresAt: 1, status: 1 });

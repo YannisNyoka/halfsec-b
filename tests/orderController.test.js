@@ -8,6 +8,7 @@ import { mockReq, mockRes } from './helpers/mockReqRes.js';
 import { createUser, createProduct, createCartForUser } from './helpers/fixtures.js';
 
 import Coupon from '../models/Coupon.js';
+import Product from '../models/Product.js';
 import { placeOrder } from '../controllers/orderController.js';
 
 before(async () => {
@@ -194,5 +195,82 @@ describe('placeOrder — coupon handling', () => {
     const coupon = await Coupon.findOne({ code: 'LASTONE' });
     assert.equal(coupon.usageCount, 1);
     assert.equal(coupon.usedBy.length, 1);
+  });
+});
+
+describe('placeOrder — stock reservation', () => {
+  test('decrements stock and increments sold on a normal purchase', async () => {
+    const buyer = await createUser();
+    const product = await createProduct({ price: 300, stock: 5 });
+    await createCartForUser(buyer._id, [{ product, quantity: 2 }]);
+
+    const res = mockRes();
+    await placeOrder(placeOrderReq(buyer._id), res);
+
+    assert.equal(res.statusCode, 201);
+    const updated = await Product.findById(product._id);
+    assert.equal(updated.stock, 3);
+    assert.equal(updated.sold, 2);
+  });
+
+  test('rejects checkout when stock is insufficient and does not touch stock', async () => {
+    const buyer = await createUser();
+    const product = await createProduct({ price: 300, stock: 1 });
+    await createCartForUser(buyer._id, [{ product, quantity: 2 }]);
+
+    const res = mockRes();
+    await placeOrder(placeOrderReq(buyer._id), res);
+
+    assert.equal(res.statusCode, 400);
+    const updated = await Product.findById(product._id);
+    assert.equal(updated.stock, 1);
+  });
+
+  test('two concurrent checkouts for the last unit cannot both succeed', async () => {
+    const buyerA = await createUser();
+    const buyerB = await createUser();
+    const product = await createProduct({ price: 300, stock: 1 });
+    await createCartForUser(buyerA._id, [{ product, quantity: 1 }]);
+    await createCartForUser(buyerB._id, [{ product, quantity: 1 }]);
+
+    const resA = mockRes();
+    const resB = mockRes();
+
+    await Promise.all([
+      placeOrder(placeOrderReq(buyerA._id), resA),
+      placeOrder(placeOrderReq(buyerB._id), resB),
+    ]);
+
+    const successes = [resA, resB].filter((r) => r.statusCode === 201).length;
+    const failures = [resA, resB].filter((r) => r.statusCode === 400).length;
+
+    assert.equal(successes, 1, 'exactly one of the two concurrent checkouts should get the last unit');
+    assert.equal(failures, 1);
+
+    const updated = await Product.findById(product._id);
+    assert.equal(updated.stock, 0, 'stock must never go negative — no oversell');
+    assert.equal(updated.sold, 1);
+  });
+
+  test('rolls back an earlier item\'s claimed stock when a later item in the same order loses the stock race', async () => {
+    const buyer = await createUser();
+    const inStockProduct = await createProduct({ price: 100, stock: 5 });
+    const raceProduct = await createProduct({ price: 100, stock: 1 });
+    await createCartForUser(buyer._id, [
+      { product: inStockProduct, quantity: 1 },
+      { product: raceProduct, quantity: 1 },
+    ]);
+
+    // Simulate someone else buying the last unit between cart population and
+    // checkout — passes the earlier advisory check (cart snapshot said stock:1),
+    // but fails the live atomic claim.
+    await Product.findByIdAndUpdate(raceProduct._id, { stock: 0 });
+
+    const res = mockRes();
+    await placeOrder(placeOrderReq(buyer._id), res);
+
+    assert.equal(res.statusCode, 400);
+    const updatedInStock = await Product.findById(inStockProduct._id);
+    assert.equal(updatedInStock.stock, 5, 'the first item\'s claim must be rolled back when the order as a whole fails');
   });
 });
