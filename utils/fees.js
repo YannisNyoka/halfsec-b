@@ -1,3 +1,6 @@
+// ── Shipping ─────────────────────────────────────────────────────────────────────
+export const SHIPPING_COST = 80;
+
 // ── Buyer Protection Fee tiers ───────────────────────────────────────────────────
 // Sliding scale similar to YAGA's model
 export const calculateProtectionFee = (itemsTotal) => {

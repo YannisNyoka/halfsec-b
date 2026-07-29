@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import { validationResult } from 'express-validator';
 import { sendOrderConfirmation, sendAdminOrderAlert, sendOrderStatusUpdate } from '../utils/email.js';
 import Coupon from '../models/Coupon.js';
-import { calculateProtectionFee, groupItemsBySeller } from '../utils/fees.js';
+import { calculateProtectionFee, groupItemsBySeller, SHIPPING_COST } from '../utils/fees.js';
 import { calculateAutoReleaseDate } from '../utils/escrow.js';
 import { claimStock } from '../utils/stock.js';
 import {
@@ -128,7 +128,7 @@ export const placeOrder = async (req, res) => {
     }
 
     const buyerProtectionFee = calculateProtectionFee(itemsTotal);
-    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const shippingCost = SHIPPING_COST;
     const total = Math.max(0, itemsTotal + buyerProtectionFee + shippingCost - discountAmount);
 
 // Group items by seller for sub-order tracking
@@ -357,7 +357,7 @@ export const getCheckoutPreview = async (req, res) => {
       (sum, item) => sum + item.priceAtAdd * item.quantity, 0
     );
     const buyerProtectionFee = calculateProtectionFee(itemsTotal);
-    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const shippingCost = SHIPPING_COST;
     const total = itemsTotal + buyerProtectionFee + shippingCost;
 
     // Count distinct sellers for info display

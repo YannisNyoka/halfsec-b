@@ -6,7 +6,7 @@ import User from '../models/User.js';
 import { notify, notifyOrderPlaced, notifyNewOrderSeller } from '../utils/notify.js';
 import { pushOrderPlaced, pushNewSale } from '../utils/pushNotify.js';
 import { sendOrderConfirmation, sendAdminOrderAlert } from '../utils/email.js';
-import { calculateProtectionFee, groupItemsBySeller } from '../utils/fees.js';
+import { calculateProtectionFee, groupItemsBySeller, SHIPPING_COST } from '../utils/fees.js';
 import { calculateAutoReleaseDate } from '../utils/escrow.js';
 import { claimStock } from '../utils/stock.js';
 
@@ -269,7 +269,7 @@ export const getOfferCheckout = async (req, res) => {
 
     const itemsTotal = offer.offerPrice;
     const buyerProtectionFee = calculateProtectionFee(itemsTotal);
-    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const shippingCost = SHIPPING_COST;
     const total = itemsTotal + buyerProtectionFee + shippingCost;
 
     res.status(200).json({ offer, itemsTotal, buyerProtectionFee, shippingCost, total });
@@ -338,7 +338,7 @@ export const purchaseOffer = async (req, res) => {
 
     const itemsTotal = offer.offerPrice;
     const buyerProtectionFee = calculateProtectionFee(itemsTotal);
-    const shippingCost = itemsTotal >= 500 ? 0 : 80;
+    const shippingCost = SHIPPING_COST;
     const total = itemsTotal + buyerProtectionFee + shippingCost;
 
     const grouped = groupItemsBySeller([orderItem]);
