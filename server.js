@@ -50,6 +50,7 @@ const allowedOrigins = [
   'https://www.halfsec.co.za',
   'https://halfsec-f.vercel.app',
   'http://localhost:5173',
+   'http://localhost:5174',
 ].filter(Boolean);
 
 

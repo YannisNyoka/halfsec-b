@@ -664,3 +664,33 @@ export const sendPayoutProcessedEmail = async (sellerEmail, sellerName, payout) 
     html: emailWrapper(content),
   });
 };
+
+// ── Password reset ───────────────────────────────────────────────────────────────
+export const sendPasswordResetEmail = async (userEmail, userName, resetUrl) => {
+  const content = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;">
+      Reset your password
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#666;line-height:1.6;">
+      Hi ${userName}, we received a request to reset your Halfsec password.
+      Click the button below to choose a new one. This link expires in 1 hour.
+    </p>
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${resetUrl}"
+        style="display:inline-block;background:#f5a623;color:#ffffff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none;">
+        Reset my password →
+      </a>
+    </div>
+
+    <p style="margin:0;font-size:13px;color:#888;line-height:1.6;">
+      If you didn't request this, you can safely ignore this email — your password won't be changed.
+    </p>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: 'Reset your Halfsec password',
+    html: emailWrapper(content),
+  });
+};
