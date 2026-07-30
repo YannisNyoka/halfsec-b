@@ -80,7 +80,7 @@ export const productValidator = [
   body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number.'),
   body('category').notEmpty().withMessage('Category is required.'),
   body('condition')
-    .isIn(['like new', 'good', 'fair', 'poor'])
+    .isIn(['new', 'like new', 'good', 'fair', 'poor'])
     .withMessage('Invalid condition value.'),
   body('stock').isInt({ min: 0 }).withMessage('Stock must be a non-negative integer.'),
 ];
