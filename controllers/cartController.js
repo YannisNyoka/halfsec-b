@@ -33,6 +33,9 @@ export const addToCart = async (req, res) => {
     if (!product || !product.isActive) {
       return res.status(404).json({ message: 'Product not found.' });
     }
+    if (product.isSoldOut) {
+      return res.status(400).json({ message: 'This item is sold out.' });
+    }
     if (product.stock < quantity) {
       return res.status(400).json({ message: `Only ${product.stock} item(s) available.` });
     }
@@ -80,6 +83,9 @@ export const updateCartItem = async (req, res) => {
 
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: 'Product not found.' });
+    if (product.isSoldOut) {
+      return res.status(400).json({ message: 'This item is sold out.' });
+    }
     if (product.stock < quantity) {
       return res.status(400).json({ message: `Only ${product.stock} item(s) available.` });
     }

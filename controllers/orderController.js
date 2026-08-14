@@ -29,7 +29,7 @@ export const placeOrder = async (req, res) => {
     const { shippingAddress, paymentMethod, notes } = req.body;
 
     const cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name images price stock isActive seller');
+      .populate('items.product', 'name images price stock isActive isSoldOut seller');
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ message: 'Your cart is empty.' });
@@ -38,6 +38,9 @@ export const placeOrder = async (req, res) => {
     for (const item of cart.items) {
       if (!item.product || !item.product.isActive) {
         return res.status(400).json({ message: 'A product in your cart is no longer available.' });
+      }
+      if (item.product.isSoldOut) {
+        return res.status(400).json({ message: `"${item.product.name}" is sold out.` });
       }
       if (item.product.stock < item.quantity) {
         return res.status(400).json({

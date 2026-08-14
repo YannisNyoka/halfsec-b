@@ -11,7 +11,7 @@ export const claimStock = async (items) => {
 
   for (const item of items) {
     const result = await Product.findOneAndUpdate(
-      { _id: item.product, stock: { $gte: item.quantity } },
+      { _id: item.product, stock: { $gte: item.quantity }, isSoldOut: { $ne: true } },
       { $inc: { stock: -item.quantity, sold: item.quantity } },
       { returnDocument: 'after' }
     );

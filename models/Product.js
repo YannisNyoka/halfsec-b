@@ -62,6 +62,12 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Manually flagged sold out by admin/seller, independent of stock count
+    // (e.g. the item sold elsewhere) — the product stays listed, just unbuyable.
+    isSoldOut: {
+      type: Boolean,
+      default: false,
+    },
     tags: [{ type: String, lowercase: true, trim: true }],
     sold: {
       type: Number,

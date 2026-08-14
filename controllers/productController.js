@@ -63,7 +63,10 @@ export const getProducts = async (req, res) => {
 
     if (featured === 'true') filter.isFeatured = true;
     if (seller) filter.seller = seller;
-    if (inStock === 'true') filter.stock = { $gt: 0 };
+    if (inStock === 'true') {
+      filter.stock = { $gt: 0 };
+      filter.isSoldOut = { $ne: true };
+    }
 
     // ── Sort ─────────────────────────────────────────────────────────────────────
     const sortOptions = {

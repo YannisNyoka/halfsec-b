@@ -5,12 +5,15 @@ import { sendLowStockAlert } from '../utils/email.js';
 export const getLowStockProducts = async (req, res) => {
   try {
     const products = await Product.find({
-      $expr: { $lte: ['$stock', '$lowStockThreshold'] },
       isActive: true,
+      $or: [
+        { $expr: { $lte: ['$stock', '$lowStockThreshold'] } },
+        { isSoldOut: true },
+      ],
     })
       .populate('category', 'name')
       .sort({ stock: 1 })
-      .select('name slug stock lowStockThreshold images category isActive sold');
+      .select('name slug stock lowStockThreshold images category isActive isSoldOut sold');
 
     res.status(200).json({ products, count: products.length });
   } catch (error) {
@@ -62,14 +65,16 @@ export const getStockOverview = async (req, res) => {
       inStock,
     ] = await Promise.all([
       Product.countDocuments({ isActive: true }),
-      Product.countDocuments({ isActive: true, stock: 0 }),
+      Product.countDocuments({ isActive: true, $or: [{ stock: 0 }, { isSoldOut: true }] }),
       Product.countDocuments({
         isActive: true,
         stock: { $gt: 0 },
+        isSoldOut: { $ne: true },
         $expr: { $lte: ['$stock', '$lowStockThreshold'] },
       }),
       Product.countDocuments({
         isActive: true,
+        isSoldOut: { $ne: true },
         $expr: { $gt: ['$stock', '$lowStockThreshold'] },
       }),
     ]);

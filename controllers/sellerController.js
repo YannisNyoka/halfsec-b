@@ -96,8 +96,8 @@ export const getSellerStats = async (req, res) => {
 
     const [totalProducts, activeProducts, outOfStock, salesData] = await Promise.all([
       Product.countDocuments({ seller: sellerId }),
-      Product.countDocuments({ seller: sellerId, isActive: true, stock: { $gt: 0 } }),
-      Product.countDocuments({ seller: sellerId, stock: 0 }),
+      Product.countDocuments({ seller: sellerId, isActive: true, stock: { $gt: 0 }, isSoldOut: { $ne: true } }),
+      Product.countDocuments({ seller: sellerId, $or: [{ stock: 0 }, { isSoldOut: true }] }),
       Order.aggregate([
         { $unwind: '$items' },
         { $match: { 'items.seller': new (await import('mongoose')).default.Types.ObjectId(sellerId) } },
